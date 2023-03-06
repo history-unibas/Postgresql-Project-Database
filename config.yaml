@@ -1,0 +1,14 @@
+---
+
+# postgresql database
+dbname: hgb
+db_user: postgres
+db_host: localhost
+
+# stabs metadata
+filepath_serie: data/stabs_serie.csv
+filepath_dossier: data/stabs_dossier.csv
+
+# import scripts from other repositories
+uri_query_metadata: 'https://raw.githubusercontent.com/history-unibas/Metadata-Historical-Land-Registry-Basel/main/queryMetadata.py'
+uri_connect_transkribus: 'https://raw.githubusercontent.com/history-unibas/Trankribus-API/main/connectTranskribus.py'
