@@ -127,7 +127,7 @@ def copy_database(dbname_source, dbname_destination, user, password, host, port=
     conn = psycopg2.connect(user=user, host=host, password=password, port=port)
     conn.autocommit = True
     cursor = conn.cursor()
-    cursor.execute(f'CREATE DATABASE {dbname_destination} WITH TEMPLATE {dbname_source} OWNER {db_user}')
+    cursor.execute(f'CREATE DATABASE {dbname_destination} WITH TEMPLATE {dbname_source} OWNER {user}')
     conn.close()
 
 

@@ -90,15 +90,15 @@ def processing_transkribus(series_data, dossiers_data, dbname, db_user, db_passw
         coll = pd.DataFrame(list_collections(sid))
 
         # Analyse which collections where skipped
-        test = coll.merge(series_data, how='left', left_on='colName', right_on='serieid', indicator=True)
+        test = coll.merge(series_data, how='left', left_on='colName', right_on='serieId', indicator=True)
         logging.warning('The following Transkribus collection where skipped: %s. They are not available in table stabs_serie.', test.query("_merge == 'left_only'")['colName'].values)
 
         # Analyse which collections are missing
-        test = coll.merge(series_data, how='right', left_on='colName', right_on='serieid', indicator=True)
+        test = coll.merge(series_data, how='right', left_on='colName', right_on='serieId', indicator=True)
         logging.info('For the following series, no Transkribus collection are available: %s', test.query("_merge == 'right_only'")['title'].values)
 
         # Keep only collection features available in stabs_serie data
-        coll = pd.merge(coll, series_data, how='inner', left_on='colName', right_on='serieid', validate='one_to_one')
+        coll = pd.merge(coll, series_data, how='inner', left_on='colName', right_on='serieId', validate='one_to_one')
 
         # Keep columns according project database schema
         coll = coll[['colId', 'colName', 'nrOfDocuments']]
@@ -117,15 +117,15 @@ def processing_transkribus(series_data, dossiers_data, dbname, db_user, db_passw
         n_documents = len(all_doc)
 
     # Analyse which documents where skipped
-    test = all_doc.merge(dossiers_data, how='left', left_on='title', right_on='dossierid', indicator=True)
+    test = all_doc.merge(dossiers_data, how='left', left_on='title', right_on='dossierId', indicator=True)
     logging.info('The following Transkribus document are not available in table stabs_dossier: %s', test.query("_merge == 'left_only'")['title_x'].values)
 
     # Analyse which documents are missing
-    test = all_doc.merge(dossiers_data, how='right', left_on='title', right_on='dossierid', indicator=True)
+    test = all_doc.merge(dossiers_data, how='right', left_on='title', right_on='dossierId', indicator=True)
     logging.info('The following Transkribus document where skipped: %s', test.query("_merge == 'right_only'")['title_y'].values)
 
     # Test if left join to stabs_dossier data returns one-to-one-connections
-    test = pd.merge(all_doc, dossiers_data, how='left', left_on='title', right_on='dossierid', suffixes=('', '_dossier'), validate='one_to_one') 
+    test = pd.merge(all_doc, dossiers_data, how='left', left_on='title', right_on='dossierId', suffixes=('', '_dossier'), validate='one_to_one') 
 
     # Check if documents already exist in project database
     transkribus_docs = pd.DataFrame(read_table(dbname=dbname, dbtable='transkribus_document', user=db_user, password=db_password, host=db_host, port=db_port),
@@ -169,23 +169,28 @@ def processing_transkribus(series_data, dossiers_data, dbname, db_user, db_passw
                 for textregion in page_xml.iter('{http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15}TextRegion'):
                     # Find all unicode tag childs
                     unicode = textregion.findall('.//{http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15}Unicode')
-                    try:
-                        # The last candidate is the whole text of the region
-                        text = unicode[-1].text
-                    except:
-                        # Do not consider empty text regions
+                    
+                    # Extract all text lines (exclude last candidate, correspond to the whole text of the region)
+                    text_line = [item.text for item in unicode[:-1]]
+                    if not text_line:
+                        # Skip empty textregions
                         continue
-                    # Filter empty text regions
-                    if not text:
-                        continue
-                    text_line = [item.text for item in unicode[:-1]] 
+                    
+                    # Create string of whole text region (not using last candidate because it might be empty because of Transkribus bug)
+                    text = '\n'.join(text_line)
+
+                    # Determine type of text region
                     textregion_custom = textregion.get('custom')
                     index_textregion = int(re.search(r'index:[0-9]+;', textregion_custom).group()[6:-1])
                     try:
                         type_textregion = re.search(r'type:[a-z]+;', textregion_custom).group()[5:-1]
                     except:
                         type_textregion = None
+
+                    # Get type of text region
                     text_region_id = f"{key_transcript}_{int(index_textregion):02}"
+
+                    # Add text region to dataframe
                     all_textregion = pd.concat([all_textregion, pd.DataFrame([[text_region_id, key_transcript, index_textregion, type_textregion, text_line, text]],
                                                columns=['textRegionId', 'key', 'index', 'type', 'textLine', 'text'])], ignore_index=True)
 
