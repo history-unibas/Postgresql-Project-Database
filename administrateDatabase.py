@@ -107,7 +107,8 @@ def create_schema(dbname, user, password, host, port=5432):
     except Exception as err:
         logging.warning(f'{err=}, {type(err)=}')
     cursor.execute('''GRANT SELECT ON ALL TABLES IN SCHEMA public TO read_only''')
-
+    cursor.execute('''ALTER ROLE read_only SET \
+                      idle_in_transaction_session_timeout = "10min"''')
     conn.close()
 
 
