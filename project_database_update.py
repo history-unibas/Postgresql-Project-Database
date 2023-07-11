@@ -459,8 +459,9 @@ def main():
     db_port = input('PostgreSQL database port:')
     filepath_serie = config['filepath_serie']
     filepath_dossier = config['filepath_dossier']
-    dblink_connname = f'host={db_host} user={db_user} '\
-        f'password={db_password} dbname={dbname}'
+    dblink_connname = f'dbname={dbname} '\
+        f'user={db_user} password={db_password} '\
+        f'host={db_host} port={db_port}'
 
     # Define name for temporary database in case the script breaks.
     dbname_temp = dbname + '_temp'
