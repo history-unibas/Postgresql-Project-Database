@@ -109,7 +109,7 @@ This script contains functions creating the project database and its schema and 
 ## connectDatabase.py
 Functions to read and write to database tables as well as functions to check if a database exist or a table is empty are defined in this script.
 
-## updateProjectDatabase.py
+## project_database_update.py
 This script allows to create and update the project database. The data sources used are metadata of the Historical Land Registry of the City of Basel and data from the Transkribus platform. The script uses functions from the following repositories:
 - https://github.com/history-unibas/Metadata-Historical-Land-Registry-Basel
 - https://github.com/history-unibas/Trankribus-API
