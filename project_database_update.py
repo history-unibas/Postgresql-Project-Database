@@ -72,9 +72,6 @@ def download_script(url):
     Raises:
         ValueError: Request status code is not ok.
     """
-
-    # TODO: Download a file given the url
-
     filename = url.split('/')[-1]
     r = requests.get(url)
     if r.status_code == requests.codes.ok:
