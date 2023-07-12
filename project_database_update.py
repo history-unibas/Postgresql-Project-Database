@@ -359,9 +359,12 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                         './/{http://schema.primaresearch.org/PAGE/gts/'
                         'pagecontent/2013-07-15}Unicode')
 
-                    # Extract all text lines (exclude last candidate,
-                    # correspond to the whole text of the region).
-                    text_line = [item.text for item in unicode[:-1]]
+                    # Extract all text lines. Exclude last candidate,
+                    # correspond to the whole text of the region as well as
+                    # empty text lines.
+                    text_line = [item.text for item in unicode[:-1]
+                                 if bool(item.text)
+                                 ]
                     if not text_line:
                         # Skip empty textregions.
                         continue
