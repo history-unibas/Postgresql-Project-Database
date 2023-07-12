@@ -26,7 +26,6 @@ https://github.com/history-unibas/Trankribus-API.
 """
 
 
-import yaml
 import logging
 from datetime import datetime
 import requests
@@ -45,8 +44,14 @@ from connectDatabase import (populate_table, read_table, check_database_exist,
 # Set directory of logfile.
 LOGFILE_DIR = './project_database_update.log'
 
-# Set directory of the config file.
-CONFIG_DIR = './config.yaml'
+# Set parameters for postgresql database
+DB_NAME = 'hgb'
+DB_USER = 'postgres'
+DB_HOST = 'localhost'
+
+# Set filepaths for HGB metadata.
+FILEPATH_SERIE = './data/stabs_serie.csv'
+FILEPATH_DOSSIER = './data/stabs_dossier.csv'
 
 # Define url to necessary repositories.
 URI_QUERY_METADATA = 'https://raw.githubusercontent.com/history-unibas/'\
@@ -450,80 +455,74 @@ def main():
                       f'{process_transkribus}.')
         raise
 
-    # Set parameters of the database.
-    config = yaml.safe_load(open(CONFIG_DIR))
-    dbname = config['dbname']
-    db_user = config['db_user']
+    # Get parameters of the database.
     db_password = input('PostgreSQL database superuser password:')
-    db_host = config['db_host']
     db_port = input('PostgreSQL database port:')
-    filepath_serie = config['filepath_serie']
-    filepath_dossier = config['filepath_dossier']
-    dblink_connname = f'dbname={dbname} '\
-        f'user={db_user} password={db_password} '\
-        f'host={db_host} port={db_port}'
+    dblink_connname = f'dbname={DB_NAME} '\
+        f'user={DB_USER} password={db_password} '\
+        f'host={DB_HOST} port={db_port}'
 
     # Define name for temporary database in case the script breaks.
-    dbname_temp = dbname + '_temp'
+    dbname_temp = DB_NAME + '_temp'
 
     # Check if temp database already exist.
     db_temp_exist = check_database_exist(dbname=dbname_temp,
-                                         user=db_user, password=db_password,
-                                         host=db_host, port=db_port
+                                         user=DB_USER, password=db_password,
+                                         host=DB_HOST, port=db_port
                                          )
 
     # Create new temp database and schema if not existent.
     if not db_temp_exist:
         create_database(dbname=dbname_temp,
-                        user=db_user, password=db_password,
-                        host=db_host, port=db_port
+                        user=DB_USER, password=db_password,
+                        host=DB_HOST, port=db_port
                         )
         create_schema(dbname=dbname_temp,
-                      user=db_user, password=db_password,
-                      host=db_host, port=db_port
+                      user=DB_USER, password=db_password,
+                      host=DB_HOST, port=db_port
                       )
         logging.info(f'New database {dbname_temp} created.')
     else:
         logging.warning(f'The database {dbname_temp} already exist.')
 
     # Check if database does exist.
-    db_exist = check_database_exist(dbname=dbname,
-                                    user=db_user, password=db_password,
-                                    host=db_host, port=db_port
+    db_exist = check_database_exist(dbname=DB_NAME,
+                                    user=DB_USER, password=db_password,
+                                    host=DB_HOST, port=db_port
                                     )
 
     # Processing metadata.
     stabs_serie_empty = check_table_empty(
         dbname=dbname_temp, dbtable='stabs_serie',
-        user=db_user, password=db_password,
-        host=db_host, port=db_port
+        user=DB_USER, password=db_password,
+        host=DB_HOST, port=db_port
         )
     stabs_dossier_empty = check_table_empty(
         dbname=dbname_temp, dbtable='stabs_dossier',
-        user=db_user, password=db_password,
-        host=db_host, port=db_port
+        user=DB_USER, password=db_password,
+        host=DB_HOST, port=db_port
         )
     if not all((stabs_serie_empty, stabs_dossier_empty)):
         logging.warning(
             f'Metadata table(s) are not empty in database {dbname_temp}. '
-            f'No metadata will be new processed or copied from {dbname}.'
+            f'No metadata will be new processed or copied from {DB_NAME}.'
             )
     # Case when all metadata tables are empty.
     else:
         if process_metadata:
-            processing_metadata(filepath_serie=filepath_serie,
-                                filepath_dossier=filepath_dossier,
+            processing_metadata(filepath_serie=FILEPATH_SERIE,
+                                filepath_dossier=FILEPATH_DOSSIER,
                                 dbname=dbname_temp,
-                                db_user=db_user, db_password=db_password,
-                                db_host=db_host, db_port=db_port
+                                db_user=DB_USER, db_password=db_password,
+                                db_host=DB_HOST, db_port=db_port
                                 )
             logging.info('Metadata are processed.')
         elif db_exist:
             # Copy existing tables stabs_serie and stabs_dossier from database
             # hgb to database hgb_temp.
             conn = psycopg2.connect(dbname=dbname_temp,
-                                    user=db_user, password=db_password,
-                                    host=db_host, port=db_port
+                                    user=DB_USER, password=db_password,
+                                    host=DB_HOST, port=db_port
                                     )
             conn.autocommit = True
             cursor = conn.cursor()
@@ -551,48 +550,48 @@ def main():
     if process_transkribus:
         # Read series and dossiers created by processing_metadata() for
         # selecting transkribus features.
-        series_data = pd.read_csv(filepath_serie)
-        dossiers_data = pd.read_csv(filepath_dossier)
+        series_data = pd.read_csv(FILEPATH_SERIE)
+        dossiers_data = pd.read_csv(FILEPATH_DOSSIER)
         processing_transkribus(series_data=series_data,
                                dossiers_data=dossiers_data,
                                dbname=dbname_temp,
-                               db_user=db_user, db_password=db_password,
-                               db_host=db_host, db_port=db_port
+                               db_user=DB_USER, db_password=db_password,
+                               db_host=DB_HOST, db_port=db_port
                                )
         logging.info('Transkribus data are processed.')
     elif db_exist:
         # Test if transkribus tables are empty.
         coll_empty = check_table_empty(dbname=dbname_temp,
                                        dbtable='transkribus_collection',
-                                       user=db_user, password=db_password,
-                                       host=db_host, port=db_port
+                                       user=DB_USER, password=db_password,
+                                       host=DB_HOST, port=db_port
                                        )
         doc_empty = check_table_empty(dbname=dbname_temp,
                                       dbtable='transkribus_document',
-                                      user=db_user, password=db_password,
-                                      host=db_host, port=db_port
+                                      user=DB_USER, password=db_password,
+                                      host=DB_HOST, port=db_port
                                       )
         page_empty = check_table_empty(dbname=dbname_temp,
                                        dbtable='transkribus_page',
-                                       user=db_user, password=db_password,
-                                       host=db_host, port=db_port
+                                       user=DB_USER, password=db_password,
+                                       host=DB_HOST, port=db_port
                                        )
         ts_empty = check_table_empty(dbname=dbname_temp,
                                      dbtable='transkribus_transcript',
-                                     user=db_user, password=db_password,
-                                     host=db_host, port=db_port
+                                     user=DB_USER, password=db_password,
+                                     host=DB_HOST, port=db_port
                                      )
         region_empty = check_table_empty(dbname=dbname_temp,
                                          dbtable='transkribus_textregion',
-                                         user=db_user, password=db_password,
-                                         host=db_host, port=db_port
+                                         user=DB_USER, password=db_password,
+                                         host=DB_HOST, port=db_port
                                          )
         if all((coll_empty, doc_empty, page_empty, ts_empty, region_empty)):
             # Copy existing transkribus tables from database hgb to database
             # hgb_temp.
             conn = psycopg2.connect(dbname=dbname_temp,
-                                    user=db_user, password=db_password,
-                                    host=db_host, port=db_port
+                                    user=DB_USER, password=db_password,
+                                    host=DB_HOST, port=db_port
                                     )
             conn.autocommit = True
             cursor = conn.cursor()
@@ -636,36 +635,37 @@ def main():
         else:
             logging.warning(
                 f'Transkribus table(s) are not empty in database {dbname_temp}'
-                f'. The data are not copied from {dbname}.')
+                f'. The data are not copied from {DB_NAME}.')
     else:
         logging.warning('No transkribus data will be available in database.')
 
     # Delete existing database
     if db_exist:
         try:
-            delete_database(dbname=dbname,
-                            user=db_user, password=db_password,
-                            host=db_host, port=db_port
+            delete_database(dbname=DB_NAME,
+                            user=DB_USER, password=db_password,
+                            host=DB_HOST, port=db_port
                             )
-            logging.info(f'Old database {dbname} was deleted.')
+            logging.info(f'Old database {DB_NAME} was deleted.')
         except Exception as err:
-            logging.error(f'The database {dbname} can\'t be deleted. {err=}, '
+            logging.error(f'The database {DB_NAME} can\'t be deleted. {err=}, '
                           f'{type(err)=}')
             raise
 
     # Rename the database
-    rename_database(dbname_old=dbname_temp, dbname_new=dbname,
-                    user=db_user, password=db_password,
-                    host=db_host, port=db_port)
-    logging.info(f'Database {dbname_temp} was renamed to {dbname}.')
+    rename_database(dbname_old=dbname_temp, dbname_new=DB_NAME,
+                    user=DB_USER, password=db_password,
+                    host=DB_HOST, port=db_port)
+    logging.info(f'Database {dbname_temp} was renamed to {DB_NAME}.')
 
     # Generate a copy of the database with timestamp
-    dbname_copy = dbname + '_' + str(datetime_started.date()).replace('-', '_')
-    copy_database(dbname_source=dbname, dbname_destination=dbname_copy,
-                  user=db_user, password=db_password,
-                  host=db_host, port=db_port
+    dbname_copy = DB_NAME + '_' + \
+        str(datetime_started.date()).replace('-', '_')
+    copy_database(dbname_source=DB_NAME, dbname_destination=dbname_copy,
+                  user=DB_USER, password=db_password,
+                  host=DB_HOST, port=db_port
                   )
-    logging.info(f'New database {dbname} copied to {dbname_copy}.')
+    logging.info(f'New database {DB_NAME} copied to {dbname_copy}.')
 
     datetime_ended = datetime.now()
     datetime_duration = datetime_ended - datetime_started
