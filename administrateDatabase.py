@@ -19,6 +19,11 @@ def delete_database(dbname, user, password, host, port=5432):
         conn = psycopg2.connect(user=user, password=password, host=host, port=port)
         conn.autocommit = True
         cursor = conn.cursor()
+        # Kill all other connections.
+        cursor.execute(f"""
+        SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid <>
+        pg_backend_pid() AND datname = '{dbname}'
+        """)
         cursor.execute('DROP database ' + dbname)
         conn.close()
     except Exception as err:
@@ -42,6 +47,9 @@ def create_schema(dbname, user, password, host, port=5432):
     conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host, port=port)
     conn.autocommit = True
     cursor = conn.cursor()
+
+    # Load modules for creating UUID's.
+    cursor.execute('''CREATE EXTENSION IF NOT EXISTS "uuid-ossp"''')
 
     # Create tables for historical land registry Basel metadata
     cursor.execute('''CREATE TABLE StABS_Serie(serieId VARCHAR(10) PRIMARY KEY,
@@ -93,10 +101,19 @@ def create_schema(dbname, user, password, host, port=5432):
                                                           text VARCHAR(10000) NOT NULL)
                    ''')
 
-    # Load modules for full text search
-    cursor.execute('''CREATE EXTENSION pg_trgm''')
-    cursor.execute('''CREATE EXTENSION fuzzystrmatch''')
-    cursor.execute('''CREATE EXTENSION dblink''')
+    # Create project specific tables.
+    cursor.execute("""
+    CREATE TABLE Project_Entry(
+        entryId UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+        pageId INTEGER[] NOT NULL,
+        year SMALLINT,
+        yearSource VARCHAR(40) REFERENCES Transkribus_TextRegion(textRegionId))
+    """)
+
+    # Load modules for full text search.
+    cursor.execute('''CREATE EXTENSION IF NOT EXISTS pg_trgm''')
+    cursor.execute('''CREATE EXTENSION IF NOT EXISTS fuzzystrmatch''')
+    cursor.execute('''CREATE EXTENSION IF NOT EXISTS dblink''')
 
     # Create index for transkribus_textregion.text
     cursor.execute('''CREATE INDEX text_idx ON transkribus_textregion USING GIST (text gist_trgm_ops)''')
@@ -118,6 +135,11 @@ def rename_database(dbname_old, dbname_new, user, password, host, port=5432):
     conn = psycopg2.connect(user=user, host=host, password=password, port=port)
     conn.autocommit = True
     cursor = conn.cursor()
+    # Kill all other connections.
+    cursor.execute(f"""
+    SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid <>
+    pg_backend_pid() AND datname = '{dbname_old}'
+    """)
     cursor.execute(f'ALTER DATABASE {dbname_old} RENAME TO {dbname_new}')
     conn.close()
 

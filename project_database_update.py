@@ -18,11 +18,14 @@ copied from the previous database to the temporary database (if a previous
 database exists). For more information on the Transkribus platform:
 https://github.com/history-unibas/Trankribus-API.
 
-4. Previous database is deleted.
+4. If desired, project data tables are new created and filled. Otherwise, data
+will be copied from the previous database (if existent).
 
-5. Temporary database is renamed.
+5. Previous database is deleted.
 
-6. A copy of the database is created with the date as postfix.
+6. Create a copy of temporary database to new database.
+
+7. Temporary database is renamed with date as postfix.
 """
 
 
@@ -91,9 +94,9 @@ from connect_transkribus import (get_sid, list_collections, list_documents,
                                  get_document_content, get_page_xml)
 
 
-def processing_metadata(filepath_serie, filepath_dossier, dbname,
-                        db_user, db_password,
-                        db_host, db_port=5432):
+def processing_stabs(filepath_serie, filepath_dossier, dbname,
+                     db_user, db_password,
+                     db_host, db_port=5432):
     """Processes the metadata of the HGB.
 
     This function processes all series and dossiers of the HGB and write them
@@ -174,9 +177,9 @@ def processing_transkribus(series_data, dossiers_data, dbname,
 
     Args:
         series_data (DataFrame): HGB metadata series created by
-        processing_metadata().
+        processing_stabs().
         dossiers_data (DataFrame): HGB metadata dossiers created by
-        processing_metadata().
+        processing_stabs().
         dbname (str): Name of the destination database.
         db_user (str): User of the database connection.
         db_password (str): Password for the database connection.
@@ -423,6 +426,114 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                        )
 
 
+def get_year(page_id, df_transcript, df_textregion):
+    """Extract the first occurrence of a year in header text regions.
+
+    Using the existing data in the project database, a year is extracted per
+    entry of the database table project_entry in the text regions of type
+    "header". The first occurrence of a year is taken into account.
+    If there is no header text region, None will be returned.
+
+        Args:
+            page_id (list): List of page_id's of pages to be considered.
+            df_transcript (DataFrame): Table of all transcript within the
+            project database.
+            df_textregion (DataFrame): Table of all text regions within the
+            project database.
+
+        Returns:
+            Tuble: First element of the tuble correspond to the first
+            occurrence of the year, the second element to the id of the text
+            region, from which the year comes. If there is no year, None is
+            returned.
+    """
+    # Iterate over all page_id's.
+    for page in page_id:
+        # Determine latest transcript of current page.
+        ts = df_transcript[df_transcript['pageId'] == page]
+        ts_sorted = ts.sort_values(by='timestamp', ascending=False)
+        ts_latest = ts_sorted.iloc[0]
+
+        # Get the header textregions of latest transcript.
+        tr = df_textregion[df_textregion['key'] == ts_latest['key']]
+        tr_header = tr[tr['type'] == 'header']
+        if tr_header.empty:
+            continue
+
+        # Search for first year occurance in header textregions.
+        for header in tr_header.iterrows():
+            match = re.search(r'1[0-9]{3}', header[1]['text'])
+            if match:
+                return (int(match.group()), header[1]['textRegionId'])
+
+    return (None, None)
+
+
+def processing_project(dbname, db_password, db_user='postgres',
+                       db_host='localhost', db_port=5432):
+    """Processes the project data within the project database.
+
+    This function processes all tables of the project database with the prefix
+    "project_". In particular:
+    - Determine the entries of the database table project_entry.
+    - Search the year per entry of the the table project_entry.
+
+    Args:
+        dbname (str): Name of the project database.
+        db_password (str): Password for the database connection.
+        db_user (str): User of the database connection.
+        db_host (str): Host of the database connection.
+        db_port (int,str): Port of the database connection.
+
+    Returns:
+        None.
+
+    """
+    # Read necessary database tables.
+    page = pd.DataFrame(
+        read_table(dbname=dbname, dbtable='transkribus_page',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port),
+        columns=['pageId', 'key', 'docId', 'pageNr', 'urlImage'])
+    transcript = pd.DataFrame(
+        read_table(dbname=dbname, dbtable='transkribus_transcript',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port),
+        columns=['key', 'tsId', 'pageId', 'parentTsId', 'urlPageXml', 'status',
+                 'timestamp', 'htrModel'])
+    textregion = pd.DataFrame(
+        read_table(dbname=dbname, dbtable='transkribus_textregion',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port),
+        columns=['textRegionId', 'key', 'index', 'type', 'textLine', 'text'])
+
+    # Generate entries of table project_entry. Currently the entries in
+    # project_entry correspond to the entries in Transkribus_Page.
+    entry = pd.DataFrame(columns=['pageId', 'year', 'yearSource'])
+    for row in page.iterrows():
+        entry = pd.concat(
+            [entry,
+             pd.DataFrame([[[row[1]['pageId']], None, None]],
+                          columns=['pageId', 'year', 'yearSource'])
+             ], ignore_index=True)
+
+    # Search for first occurence in year in the header textregion of the
+    # latest page version.
+    entry[['year', 'yearSource']] = entry.apply(
+        lambda row: get_year(page_id=row['pageId'],
+                             df_transcript=transcript,
+                             df_textregion=textregion),
+        axis=1,
+        result_type='expand'
+        )
+
+    # Write data created to project database.
+    populate_table(df=entry, dbname=dbname, dbtable='project_entry',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port
+                   )
+
+
 def main():
     datetime_started = datetime.now()
 
@@ -444,6 +555,7 @@ def main():
     else:
         logging.error(f'Your answer is not True or False: {process_metadata}.')
         raise
+    logging.info(f'The metadata will be (re)processed: {process_metadata}.')
     process_transkribus = input('Do you want to (re)process the Transkribus '
                                 'data? ')
     if process_transkribus.lower() in ('true', 'yes', 'y', '1'):
@@ -454,6 +566,18 @@ def main():
         logging.error('Your answer is not True or False: '
                       f'{process_transkribus}.')
         raise
+    logging.info('The Transkribus data will be (re)processed: '
+                 f'{process_transkribus}.')
+    process_project = input('Do you want to (re)process the project data? ')
+    if process_project.lower() in ('true', 'yes', 'y', '1'):
+        process_project = True
+    elif process_project.lower() in ('false', 'no', 'n', '0'):
+        process_project = False
+    else:
+        logging.error('Your answer is not True or False: '
+                      f'{process_project}.')
+        raise
+    logging.info(f'The project data will be (re)processed: {process_project}.')
 
     # Get parameters of the database.
     db_password = input('PostgreSQL database superuser password:')
@@ -510,12 +634,12 @@ def main():
     # Case when all metadata tables are empty.
     else:
         if process_metadata:
-            processing_metadata(filepath_serie=FILEPATH_SERIE,
-                                filepath_dossier=FILEPATH_DOSSIER,
-                                dbname=dbname_temp,
-                                db_user=DB_USER, db_password=db_password,
-                                db_host=DB_HOST, db_port=db_port
-                                )
+            processing_stabs(filepath_serie=FILEPATH_SERIE,
+                             filepath_dossier=FILEPATH_DOSSIER,
+                             dbname=dbname_temp,
+                             db_user=DB_USER, db_password=db_password,
+                             db_host=DB_HOST, db_port=db_port
+                             )
             logging.info('Metadata are processed.')
         elif db_exist:
             # Copy existing tables stabs_serie and stabs_dossier from database
@@ -548,7 +672,7 @@ def main():
 
     # Processing transkribus data.
     if process_transkribus:
-        # Read series and dossiers created by processing_metadata() for
+        # Read series and dossiers created by processing_stabs() for
         # selecting transkribus features.
         series_data = pd.read_csv(FILEPATH_SERIE)
         dossiers_data = pd.read_csv(FILEPATH_DOSSIER)
@@ -639,7 +763,47 @@ def main():
     else:
         logging.warning('No transkribus data will be available in database.')
 
-    # Delete existing database
+    # Processing project data.
+    project_entry_empty = check_table_empty(
+        dbname=dbname_temp, dbtable='project_entry',
+        user=DB_USER, password=db_password,
+        host=DB_HOST, port=db_port
+        )
+    if not project_entry_empty:
+        logging.warning(
+            f'Project table is not empty in database {dbname_temp}. '
+            f'No project data will be new processed or copied from {DB_NAME}.'
+            )
+    # Case when project table is empty.
+    else:
+        if process_project:
+            processing_project(dbname=dbname_temp,
+                               db_password=db_password,
+                               db_user=DB_USER,
+                               db_host=DB_HOST,
+                               db_port=db_port
+                               )
+            logging.info('Project data are processed.')
+        elif db_exist:
+            # Copy existing project table from database DB_NAME to dbname_temp.
+            conn = psycopg2.connect(dbname=dbname_temp,
+                                    user=DB_USER, password=db_password,
+                                    host=DB_HOST, port=db_port
+                                    )
+            conn.autocommit = True
+            cursor = conn.cursor()
+            cursor.execute(f"""
+            INSERT INTO project_entry
+            SELECT * FROM dblink('{dblink_connname}',
+            'SELECT entryid,pageid,year,yearsource FROM project_entry')
+            AS t(entryid uuid, pageid integer[], year integer, yearsource text)
+            """)
+            conn.close()
+            logging.info('Project data are copied from current database.')
+        else:
+            logging.warning('No project data will be available in database.')
+
+    # Delete existing database.
     if db_exist:
         try:
             delete_database(dbname=DB_NAME,
@@ -652,20 +816,20 @@ def main():
                           f'{type(err)=}')
             raise
 
-    # Rename the database
-    rename_database(dbname_old=dbname_temp, dbname_new=DB_NAME,
-                    user=DB_USER, password=db_password,
-                    host=DB_HOST, port=db_port)
-    logging.info(f'Database {dbname_temp} was renamed to {DB_NAME}.')
-
-    # Generate a copy of the database with timestamp
-    dbname_copy = DB_NAME + '_' + \
-        str(datetime_started.date()).replace('-', '_')
-    copy_database(dbname_source=DB_NAME, dbname_destination=dbname_copy,
+    # Copy the new created database.
+    copy_database(dbname_source=dbname_temp, dbname_destination=DB_NAME,
                   user=DB_USER, password=db_password,
                   host=DB_HOST, port=db_port
                   )
-    logging.info(f'New database {DB_NAME} copied to {dbname_copy}.')
+    logging.info(f'New database {dbname_temp} copied to {DB_NAME}.')
+
+    # Rename the database.
+    dbname_copy = DB_NAME + '_' + \
+        str(datetime_started.date()).replace('-', '_')
+    rename_database(dbname_old=dbname_temp, dbname_new=dbname_copy,
+                    user=DB_USER, password=db_password,
+                    host=DB_HOST, port=db_port)
+    logging.info(f'Database {dbname_temp} was renamed to {dbname_copy}.')
 
     datetime_ended = datetime.now()
     datetime_duration = datetime_ended - datetime_started

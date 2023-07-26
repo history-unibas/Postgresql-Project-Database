@@ -18,9 +18,11 @@ The following figure shows all entities defined in the project database and thei
 
 ![entityRelations](entityRelations.svg)
 
-The tables StABS_Series and StABS_Dossier containing selected metadata available as linked open data by the State Archives of Basel.
+The tables StABS_Series and StABS_Dossier containing metadata from the Historical Land Registry (HGB) available as linked open data by the State Archives of Basel.
 
 For our research project, the images of the register cards of the historical land registry are stored and processed on the platform Transkribus (https://readcoop.eu/transkribus/). Selected information from Transkribus is additionally written into the tables Transkribus_Collection, Transkribus_Document, Transkribus_Page, Transkribus_Page, and Transkribus_TextRegion respectively, for analyses.
+
+The tables with the prefix project contain processed data relevant to our research project.
 
 ### StABS_Serie
 Elements of the StABS_Series entity represent streets. They are at the "Series" level at the State Archives. Series that do not have subordinate units at the State Archives are not represented in this table. Collections created on Transkribus for training models are also not represented in this and the following derived table.
@@ -102,6 +104,18 @@ Transcriptions of texts are stored on Transkribus within the page xmls in text r
 | type | VARCHAR(15) | no |  | Type assigned to the text region. Examples: marginalia, header, paragraph, credit, footer |
 | textLine | VARCHAR(200)[] | yes |  | Transcribed text per line saved as a list |
 | text | VARCHAR(10000) | yes |  | Entire transcribed text of the text region, indexed in the database |
+
+### Project_Entry
+Elements of the Project_Entry table represent an entry recorded in the HGB. Several entries can be documented on one register card of the HGB or one entry can extend over several pages/register cards. A page in the HGB is represented by an element in the table Transkribus_Page.
+
+This entity is currently being further developed.
+
+| **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
+|---------------|---------------|---------------|---------------|---------------|
+| entryId | UUID | yes | PRIMARY KEY | Identifier project entry |
+| pageId | INTEGER[] | yes |  | List of associated Transkribus page id's |
+| year | SMALLINT | no |  | First year detected in header text regions of latest transcript version |
+| yearSource | VARCHAR(40) | no | FOREIGN KEY | Identifier of text region (textRegionId) of the detected year number |
 
 ## administrateDatabase.py
 This script contains functions creating the project database and its schema and to administrate it using Python scripts.
