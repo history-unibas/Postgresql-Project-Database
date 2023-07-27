@@ -128,5 +128,9 @@ This script allows to create and update the project database. The data sources u
 - https://github.com/history-unibas/Metadata-Historical-Land-Registry-Basel
 - https://github.com/history-unibas/Trankribus-API
 
+
+## year_analysis.py
+This module analyses a variable year based on transcribed text. In the project database, this attribute is stored in the entity project_entry.
+
 ## Contact
 For questions please contact jonas.aeby@unibas.ch.
