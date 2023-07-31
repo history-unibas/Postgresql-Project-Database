@@ -94,6 +94,25 @@ from connect_transkribus import (get_sid, list_collections, list_documents,
                                  get_document_content, get_page_xml)
 
 
+def do_process(prompt: str) -> bool:
+    """Determine if a process should be executed based on user input.
+
+    Args:
+        prompt (str): Input message for the user.
+
+    Returns:
+        Bool: Indicator if a process should be executed.
+
+    """
+    r = input(prompt)
+    if r.lower() in ('true', 'yes', 'y', '1'):
+        return True
+    elif r.lower() in ('false', 'no', 'n', '0'):
+        return False
+    else:
+        return do_process(f'Your answer is not True or False: {r}. {prompt}')
+
+
 def processing_stabs(filepath_serie, filepath_dossier, dbname,
                      db_user, db_password,
                      db_host, db_port=5432):
@@ -547,36 +566,14 @@ def main():
     logging.info('Script started.')
 
     # Define which data will be processed.
-    process_metadata = input('Do you want to (re)process the metadata? ')
-    if process_metadata.lower() in ('true', 'yes', 'y', '1'):
-        process_metadata = True
-    elif process_metadata.lower() in ('false', 'no', 'n', '0'):
-        process_metadata = False
-    else:
-        logging.error(f'Your answer is not True or False: {process_metadata}.')
-        raise
+    process_metadata = do_process('Do you want to (re)process the metadata?')
     logging.info(f'The metadata will be (re)processed: {process_metadata}.')
-    process_transkribus = input('Do you want to (re)process the Transkribus '
-                                'data? ')
-    if process_transkribus.lower() in ('true', 'yes', 'y', '1'):
-        process_transkribus = True
-    elif process_transkribus.lower() in ('false', 'no', 'n', '0'):
-        process_transkribus = False
-    else:
-        logging.error('Your answer is not True or False: '
-                      f'{process_transkribus}.')
-        raise
+    process_transkribus = do_process('Do you want to (re)process the '
+                                     'Transkribus data?')
     logging.info('The Transkribus data will be (re)processed: '
                  f'{process_transkribus}.')
-    process_project = input('Do you want to (re)process the project data? ')
-    if process_project.lower() in ('true', 'yes', 'y', '1'):
-        process_project = True
-    elif process_project.lower() in ('false', 'no', 'n', '0'):
-        process_project = False
-    else:
-        logging.error('Your answer is not True or False: '
-                      f'{process_project}.')
-        raise
+    process_project = do_process('Do you want to (re)process the project data?'
+                                 )
     logging.info(f'The project data will be (re)processed: {process_project}.')
 
     # Get parameters of the database.
