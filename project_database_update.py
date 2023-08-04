@@ -21,11 +21,14 @@ https://github.com/history-unibas/Trankribus-API.
 4. If desired, project data tables are new created and filled. Otherwise, data
 will be copied from the previous database (if existent).
 
-5. Previous database is deleted.
+5. Process the geodata. At the moment, the geodata will always be new created
+and not copied from the previous database.
 
-6. Create a copy of temporary database to new database.
+6. Previous database is deleted.
 
-7. Temporary database is renamed with date as postfix.
+7. Create a copy of temporary database to new database.
+
+8. Temporary database is renamed with date as postfix.
 """
 
 
@@ -36,12 +39,13 @@ import psycopg2
 import pandas as pd
 import xml.etree.ElementTree as et
 import re
+import os
 
 from administrateDatabase import (delete_database, create_database,
                                   create_schema, rename_database,
                                   copy_database)
 from connectDatabase import (populate_table, read_table, check_database_exist,
-                             check_table_empty)
+                             check_table_empty, check_dbtable_exist)
 
 
 # Set directory of logfile.
@@ -55,6 +59,10 @@ DB_HOST = 'localhost'
 # Set filepaths for HGB metadata.
 FILEPATH_SERIE = './data/stabs_serie.csv'
 FILEPATH_DOSSIER = './data/stabs_dossier.csv'
+
+# Set parameter for geodata to be imported.
+SHAPEFILE_PATH = 'data/HGB_Mappen_Liste_Staatsarchiv.shp'
+SHAPEFILE_EPSG = 'EPSG:2056'
 
 # Define url to necessary repositories.
 URI_QUERY_METADATA = 'https://raw.githubusercontent.com/history-unibas/'\
@@ -506,7 +514,6 @@ def processing_project(dbname, db_password, db_user='postgres',
 
     Returns:
         None.
-
     """
     # Read necessary database tables.
     page = pd.DataFrame(
@@ -551,6 +558,86 @@ def processing_project(dbname, db_password, db_user='postgres',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port
                    )
+
+
+def import_shapefile(dbname, dbtable,
+                     shapefile_path, shapefile_epsg,
+                     db_password, db_user='postgres',
+                     db_host='localhost', db_port=5432):
+    """Import a shapefile to a new database table.
+
+    This function imports a shapefile with a defined coordinate system into a
+    database table. The geometry and all attributes are taken from the objects
+    in the shapefile.
+
+    Args:
+        dbname (str): Name of the project database.
+        dbtable (str): Name of the destination database table.
+        shapefile_path (str): Source path of the shapefile to be read.
+        shapefile_epsg (str): EPSG code of the shapefile's coordinate system.
+        db_password (str): Password for the database connection.
+        db_user (str): User of the database connection.
+        db_host (str): Host of the database connection.
+        db_port (int,str): Port of the database connection.
+
+    Returns:
+        None.
+    """
+    # Test if dbtable already exist.
+    dbtable_exist = check_dbtable_exist(dbname=dbname, dbtable=dbtable,
+                                        user=db_user, password=db_password,
+                                        host=db_host, port=db_port
+                                        )
+    if dbtable_exist:
+        logging.error(f'Table {dbtable} already exist in database {dbname}. '
+                      f'The shapefile {shapefile_path} will not be imported.')
+    else:
+        # Read the shapefile and write it in a new database table.
+        connection = f'postgresql://{db_user}:{db_password}@'\
+                     f'{db_host}:{db_port}/{dbname}'
+        command = f"""
+            shp2pgsql -D -I -s {shapefile_epsg} {shapefile_path} {dbtable} \
+            | psql {connection}"""
+        result = os.system(command)
+        if result == 0:
+            logging.info(f'Shapefile {shapefile_path} successfully imported '
+                         f'into database {dbname}, table {dbtable}.'
+                         )
+        else:
+            logging.error(f'The shapefile {shapefile_path} was not imported'
+                          f'into database {dbname}, table {dbtable}: {result}.'
+                          )
+
+
+def processing_geodata(shapefile_path, shapefile_epsg,
+                       dbname, db_password, db_user='postgres',
+                       db_host='localhost', db_port=5432):
+    """Processes the geodata within the project database.
+
+    This function processes all tables of the project database with the prefix
+    "geo_". In particular:
+    - Imports the shapefile and creating the table geo_address.
+
+    Args:
+        shapefile_path (str): Source path of the shapefile to be read.
+        shapefile_epsg (str): EPSG code of the shapefile's coordinate system.
+        dbname (str): Name of the project database.
+        db_password (str): Password for the database connection.
+        db_user (str): User of the database connection.
+        db_host (str): Host of the database connection.
+        db_port (int,str): Port of the database connection.
+
+    Returns:
+        None.
+    """
+    # Import the shapefile to the project database.
+    dbtable = 'geo_address'
+    import_shapefile(
+        dbname=dbname, dbtable=dbtable,
+        shapefile_path=shapefile_path, shapefile_epsg=shapefile_epsg,
+        db_password=db_password, db_user=db_user,
+        db_host=db_host, db_port=db_port
+        )
 
 
 def main():
@@ -799,6 +886,14 @@ def main():
             logging.info('Project data are copied from current database.')
         else:
             logging.warning('No project data will be available in database.')
+
+    # Processing geodata. At the moment, the geodata will always be processed.
+    processing_geodata(
+        shapefile_path=SHAPEFILE_PATH, shapefile_epsg=SHAPEFILE_EPSG,
+        dbname=dbname_temp, db_password=db_password, db_user=DB_USER,
+        db_host=DB_HOST, db_port=db_port
+        )
+    logging.info('Geodata are processed.')
 
     # Delete existing database.
     if db_exist:

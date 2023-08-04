@@ -3,8 +3,8 @@ This repository contains Python scripts to administrate the the project database
 
 ## Requirements
 - Python 3.10 or newer (only on Python 3.10 tested)
-- PostgreSQL (only on PostgreSQL 15.1 tested)
-- PostgreSQL extensions pg_trgm 1.6 and fuzzystrmatch 1.1
+- PostgreSQL (only on PostgreSQL 14.8 tested)
+- PostgreSQL extensions uuid-ossp 1.1, pg_trgm 1.6, fuzzystrmatch 1.1, dblink 1.2, and postgis 3.2.0
 - Packages: see requirements.txt
 
 ## Notes
@@ -23,6 +23,8 @@ The tables StABS_Series and StABS_Dossier containing metadata from the Historica
 For our research project, the images of the register cards of the historical land registry are stored and processed on the platform Transkribus (https://readcoop.eu/transkribus/). Selected information from Transkribus is additionally written into the tables Transkribus_Collection, Transkribus_Document, Transkribus_Page, Transkribus_Page, and Transkribus_TextRegion respectively, for analyses.
 
 The tables with the prefix project contain processed data relevant to our research project.
+
+Entities with the prefix Geo contain geodata.
 
 ### StABS_Serie
 Elements of the StABS_Series entity represent streets. They are at the "Series" level at the State Archives. Series that do not have subordinate units at the State Archives are not represented in this table. Collections created on Transkribus for training models are also not represented in this and the following derived table.
@@ -117,6 +119,9 @@ This entity is currently being further developed.
 | year | SMALLINT | no |  | First year detected in header text regions of latest transcript version |
 | yearSource | VARCHAR(40) | no | FOREIGN KEY | Identifier of text region (textRegionId) of the detected year number |
 
+### Geo_Address
+Elements contained in this entity represent the spatial location of HGB dossiers. Not all dossiers are included. Currently, this entity is generated based on a shapefile including all attributes contained therein. 
+
 ## administrateDatabase.py
 This script contains functions creating the project database and its schema and to administrate it using Python scripts.
 
@@ -127,7 +132,6 @@ Functions to read and write to database tables as well as functions to check if 
 This script allows to create and update the project database. The data sources used are metadata of the Historical Land Registry of the City of Basel and data from the Transkribus platform. The script uses functions from the following repositories:
 - https://github.com/history-unibas/Metadata-Historical-Land-Registry-Basel
 - https://github.com/history-unibas/Trankribus-API
-
 
 ## year_analysis.py
 This module analyses a variable year based on transcribed text. In the project database, this attribute is stored in the entity project_entry.

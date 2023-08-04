@@ -1,4 +1,3 @@
-
 """Analyze the variable year of the table project_entry.
 
 The attribute year in the table project_entry is extracted from transcribed

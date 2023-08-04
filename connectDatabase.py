@@ -9,7 +9,6 @@ This file contains functions to interact with the project database.
 
 from sqlalchemy import create_engine
 import psycopg2
-import yaml
 import logging
 
 
@@ -77,14 +76,20 @@ def check_table_empty(dbname, dbtable, user, password, host, port=5432):
         return None
 
 
-if __name__ == "__main__":
-    # Load parameters
-    config = yaml.safe_load(open('config.yaml'))
-    dbname = config['dbname']
-    db_user = config['db_user']
-    db_password = input('PostgreSQL database superuser password:')
-    db_host = config['db_host']
-    db_port = input('PostgreSQL database port:')
+def check_dbtable_exist(dbname, dbtable, user, password, host, port=5432):
+    # Check if the dbtable exist.
 
-    db_exist = check_database_exist(dbname, db_user, db_password, db_host, db_port)
-    print(f'The database {dbname} does exist: {db_exist}.')
+    conn = psycopg2.connect(dbname=dbname, user=user, password=password,
+                            host=host, port=port
+                            )
+    conn.autocommit = True
+    cursor = conn.cursor()
+    cursor.execute(f"""
+        SELECT EXISTS (SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name  = '{dbtable}')"""
+                   )
+    result = cursor.fetchall()
+    conn.close()
+    return result[0][0]

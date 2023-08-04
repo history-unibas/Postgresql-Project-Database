@@ -108,15 +108,25 @@ def create_schema(dbname, user, password, host, port=5432):
         pageId INTEGER[] NOT NULL,
         year SMALLINT,
         yearSource VARCHAR(40) REFERENCES Transkribus_TextRegion(textRegionId))
-    """)
+    """
+                   )
+
+    # Load postgis module for spatial data.
+    cursor.execute("""CREATE EXTENSION IF NOT EXISTS postgis""")
+
+    # Load module to query on other database.
+    cursor.execute("""CREATE EXTENSION IF NOT EXISTS dblink""")
 
     # Load modules for full text search.
-    cursor.execute('''CREATE EXTENSION IF NOT EXISTS pg_trgm''')
-    cursor.execute('''CREATE EXTENSION IF NOT EXISTS fuzzystrmatch''')
-    cursor.execute('''CREATE EXTENSION IF NOT EXISTS dblink''')
+    cursor.execute("""CREATE EXTENSION IF NOT EXISTS pg_trgm""")
+    cursor.execute("""CREATE EXTENSION IF NOT EXISTS fuzzystrmatch""")
 
     # Create index for transkribus_textregion.text
-    cursor.execute('''CREATE INDEX text_idx ON transkribus_textregion USING GIST (text gist_trgm_ops)''')
+    cursor.execute("""
+        CREATE INDEX text_idx
+        ON transkribus_textregion
+        USING GIST (text gist_trgm_ops)"""
+                   )
 
     # Create read only user
     try:
