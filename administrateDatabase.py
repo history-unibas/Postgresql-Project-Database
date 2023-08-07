@@ -1,14 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-
 """
 This file contains functions to create the project database and administrate it.
 """
 
 
 import psycopg2
-import yaml
 import logging
 
 
@@ -103,6 +98,13 @@ def create_schema(dbname, user, password, host, port=5432):
 
     # Create project specific tables.
     cursor.execute("""
+    CREATE TABLE Project_Dossier(
+        dossierId VARCHAR(15) PRIMARY KEY REFERENCES StABS_Dossier(dossierId),
+        yearFrom SMALLINT,
+        yearTo SMALLINT)
+    """
+                   )
+    cursor.execute("""
     CREATE TABLE Project_Entry(
         entryId UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
         pageId INTEGER[] NOT NULL,
@@ -167,18 +169,3 @@ def copy_database(dbname_source, dbname_destination, user, password, host, port=
     """)
     cursor.execute(f'CREATE DATABASE {dbname_destination} WITH TEMPLATE {dbname_source} OWNER {user}')
     conn.close()
-
-
-if __name__ == "__main__":
-    # Load parameters
-    config = yaml.safe_load(open('config.yaml'))
-    dbname = config['dbname']
-    db_user = config['db_user']
-    db_password = input('PostgreSQL database superuser password:')
-    db_host = config['db_host']
-
-    delete_database(dbname=dbname, user=db_user, password=db_password, host=db_host)
-
-    create_database(dbname=dbname, user=db_user, password=db_password, host=db_host)
-
-    create_schema(dbname=dbname, user=db_user, password=db_password, host=db_host)

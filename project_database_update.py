@@ -453,6 +453,49 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                        )
 
 
+def get_validity_range(remark: str):
+    """Extract from StABS_Dossier.descriptiveNote the validity range of the
+    Dossier.
+
+    In the attribute descriptiveNote of the entity StABS_Dossier, the validity
+    range of a dossier is partially documented. This function extracts the
+    validity range from the note for the most frequent samples.
+
+        Args:
+            remark (str): Note according to the pattern of
+            StABS_Dossier.descriptiveNote.
+
+        Returns:
+            Tuble: First element of the tuble correspond to the year from of
+            the validity range, the second element to the year to of the
+            validity range.
+    """
+    if not remark:
+        return (None, None)
+    else:
+        year_from = None
+        year_to = None
+
+    # Search for year number from.
+    match_from = re.search(r'^((Seit)|(Errichtet)|(Ab)) 1[0-9]{3}\.', remark)
+    if match_from:
+        year_from = match_from.group()[-5:-1]
+
+    # Search for year number to.
+    match_to = re.search(r'((Bis)|(Abgebrochen)) 1[0-9]{3}\.', remark)
+    if match_to:
+        year_to = match_to.group()[-5:-1]
+
+    # Consider patterns like "1734-1819".
+    if not year_from and not year_to:
+        match = re.match(r'^1[0-9]{3}-1[0-9]{3}\.?$', remark)
+        if match:
+            year_from = match.group()[:4]
+            year_to = match.group()[5:9]
+
+    return (year_from, year_to)
+
+
 def get_year(page_id, df_transcript, df_textregion):
     """Extract the first occurrence of a year in header text regions.
 
@@ -502,8 +545,10 @@ def processing_project(dbname, db_password, db_user='postgres',
 
     This function processes all tables of the project database with the prefix
     "project_". In particular:
+    - Determine the entries of the database table project_dossier.
+        - Search entries for yearFrom and yearTo based on descriptiveNote.
     - Determine the entries of the database table project_entry.
-    - Search the year per entry of the the table project_entry.
+        - Search the year per entry of the the table project_entry.
 
     Args:
         dbname (str): Name of the project database.
@@ -516,6 +561,13 @@ def processing_project(dbname, db_password, db_user='postgres',
         None.
     """
     # Read necessary database tables.
+    stabs_dossier = pd.DataFrame(
+        read_table(dbname=dbname, dbtable='stabs_dossier',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port),
+        columns=['dossierId', 'serieId', 'stabsId', 'title', 'link',
+                 'houseName', 'oldHousenumber', 'owner1862', 'descriptiveNote'
+                 ])
     page = pd.DataFrame(
         read_table(dbname=dbname, dbtable='transkribus_page',
                    user=db_user, password=db_password,
@@ -532,6 +584,15 @@ def processing_project(dbname, db_password, db_user='postgres',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
         columns=['textRegionId', 'key', 'index', 'type', 'textLine', 'text'])
+
+    # Determine the data for the entity project_dossier.
+    dossier = stabs_dossier[['dossierId', 'descriptiveNote']].copy()
+    dossier[['yearFrom', 'yearTo']] = dossier.apply(
+        lambda row: get_validity_range(row['descriptiveNote']),
+        axis=1,
+        result_type='expand'
+        )
+    dossier = dossier.drop('descriptiveNote', axis=1)
 
     # Generate entries of table project_entry. Currently the entries in
     # project_entry correspond to the entries in Transkribus_Page.
@@ -554,6 +615,10 @@ def processing_project(dbname, db_password, db_user='postgres',
         )
 
     # Write data created to project database.
+    populate_table(df=dossier, dbname=dbname, dbtable='project_dossier',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port
+                   )
     populate_table(df=entry, dbname=dbname, dbtable='project_entry',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port
@@ -848,17 +913,22 @@ def main():
         logging.warning('No transkribus data will be available in database.')
 
     # Processing project data.
+    project_dossier_empty = check_table_empty(
+        dbname=dbname_temp, dbtable='project_dossier',
+        user=DB_USER, password=db_password,
+        host=DB_HOST, port=db_port
+        )
     project_entry_empty = check_table_empty(
         dbname=dbname_temp, dbtable='project_entry',
         user=DB_USER, password=db_password,
         host=DB_HOST, port=db_port
         )
-    if not project_entry_empty:
+    if not all((project_dossier_empty, project_entry_empty)):
         logging.warning(
-            f'Project table is not empty in database {dbname_temp}. '
+            f'Project tables are not empty in database {dbname_temp}. '
             f'No project data will be new processed or copied from {DB_NAME}.'
             )
-    # Case when project table is empty.
+    # Case when all project tables are empty.
     else:
         if process_project:
             processing_project(dbname=dbname_temp,
@@ -876,6 +946,12 @@ def main():
                                     )
             conn.autocommit = True
             cursor = conn.cursor()
+            cursor.execute(f"""
+            INSERT INTO project_dossier
+            SELECT * FROM dblink('{dblink_connname}',
+            'SELECT dossierid,yearfrom,yearto FROM project_dossier')
+            AS t(dossierid text, yearfrom integer, yearto integer)
+            """)
             cursor.execute(f"""
             INSERT INTO project_entry
             SELECT * FROM dblink('{dblink_connname}',
