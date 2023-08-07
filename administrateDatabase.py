@@ -160,6 +160,11 @@ def copy_database(dbname_source, dbname_destination, user, password, host, port=
     conn = psycopg2.connect(user=user, host=host, password=password, port=port)
     conn.autocommit = True
     cursor = conn.cursor()
+    # Kill all other connections.
+    cursor.execute(f"""
+    SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid <>
+    pg_backend_pid() AND datname = '{dbname_source}'
+    """)
     cursor.execute(f'CREATE DATABASE {dbname_destination} WITH TEMPLATE {dbname_source} OWNER {user}')
     conn.close()
 
