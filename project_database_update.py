@@ -665,6 +665,18 @@ def import_shapefile(dbname, dbtable,
             | psql {connection}"""
         result = os.system(command)
         if result == 0:
+            # Grant read_only user to geodata table.
+            conn = psycopg2.connect(dbname=dbname, user=db_user,
+                                    password=db_password,
+                                    host=db_host, port=db_port
+                                    )
+            conn.autocommit = True
+            cursor = conn.cursor()
+            cursor.execute("""
+            GRANT SELECT ON TABLE public.geo_address TO read_only
+            """
+                           )
+            conn.close()
             logging.info(f'Shapefile {shapefile_path} successfully imported '
                          f'into database {dbname}, table {dbtable}.'
                          )
