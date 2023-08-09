@@ -131,7 +131,7 @@ Transcriptions of texts are stored on Transkribus within the page xmls in text r
 | text | VARCHAR(10000) | yes |  | Entire transcribed text of the text region, indexed in the database |
 
 ### Geo_Address
-Elements contained in this entity represent the spatial location of HGB dossiers. Not all dossiers are included. Currently, this entity is generated based on a shapefile including all attributes contained therein. 
+Elements contained in this entity represent the spatial location of HGB dossiers. Not all dossiers are included. Currently, this entity is generated based on a shapefile including all attributes contained therein. The elements of the Geo_Address table can be linked as follows using geo_address.signature = stabs_dossier.stabsid.
 
 ## administrateDatabase.py
 This script contains functions creating the project database and its schema and to administrate it using Python scripts.
