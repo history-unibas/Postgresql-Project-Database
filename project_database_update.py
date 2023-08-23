@@ -24,11 +24,13 @@ will be copied from the previous database (if existent).
 5. Process the geodata. At the moment, the geodata will always be new created
 and not copied from the previous database.
 
-6. Previous database is deleted.
+6. Create view for analyzing the data.
 
-7. Create a copy of temporary database to new database.
+7. Previous database is deleted.
 
-8. Temporary database is renamed with date as postfix.
+8. Create a copy of temporary database to new database.
+
+9. Temporary database is renamed with date as postfix.
 """
 
 
@@ -41,9 +43,9 @@ import xml.etree.ElementTree as et
 import re
 import os
 
-from administrateDatabase import (delete_database, create_database,
-                                  create_schema, rename_database,
-                                  copy_database)
+from administrateDatabase import (
+    delete_database, create_database, create_schema, rename_database,
+    copy_database, create_view, remove_privileges)
 from connectDatabase import (populate_table, read_table, check_database_exist,
                              check_table_empty, check_dbtable_exist)
 
@@ -983,6 +985,12 @@ def main():
         )
     logging.info('Geodata are processed.')
 
+    # Create view.
+    create_view(dbname=dbname_temp,
+                user=DB_USER, password=db_password,
+                host=DB_HOST, port=db_port
+                )
+
     # Delete existing database.
     if db_exist:
         try:
@@ -1010,6 +1018,11 @@ def main():
                     user=DB_USER, password=db_password,
                     host=DB_HOST, port=db_port)
     logging.info(f'Database {dbname_temp} was renamed to {dbname_copy}.')
+
+    # Remove privileges for the read_only user for database with date postfix.
+    remove_privileges(dbname=dbname_copy, user_revoke='read_only',
+                      user_admin=DB_USER, password_admin=db_password,
+                      host=DB_HOST, port=db_port)
 
     datetime_ended = datetime.now()
     datetime_duration = datetime_ended - datetime_started

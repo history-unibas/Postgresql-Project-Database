@@ -169,3 +169,67 @@ def copy_database(dbname_source, dbname_destination, user, password, host, port=
     """)
     cursor.execute(f'CREATE DATABASE {dbname_destination} WITH TEMPLATE {dbname_source} OWNER {user}')
     conn.close()
+
+
+def create_view(dbname, user, password, host, port=5432):
+    """Create particular database view.
+
+    Args:
+        dbname (str): Name of the database.
+        user (str): Database user.
+        password (str): Passwort for database user.
+        host (str): Host of the database connection.
+        port (str): Port of the database connection.
+
+    Returns:
+        None.
+    """
+    conn = psycopg2.connect(dbname=dbname,
+                            user=user, password=password,
+                            host=host, port=port)
+    conn.autocommit = True
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE VIEW transcript_date_geom AS
+    SELECT
+        td.title AS HGB_Dossier, tp.pagenr AS Seite, tt.text AS Transkript,
+        tt.type AS Layout_Typ, pe."year" AS Jahr, ga.geom,
+        tp.urlimage AS Bild_Link
+    FROM transkribus_textregion tt
+    INNER JOIN transkribus_transcript tt2 ON tt."key" = tt2."key"
+    INNER JOIN transkribus_page tp ON tt2.pageid = tp.pageid
+    INNER JOIN project_entry pe ON tt2.pageid = pe.pageid[1]
+    INNER JOIN transkribus_document td ON tp.docid = td.docid
+    INNER JOIN stabs_dossier sd ON td.title = sd.dossierid
+    LEFT JOIN geo_address ga ON sd.stabsid = ga.signatur
+    """
+                   )
+    cursor.execute("""GRANT SELECT ON transcript_date_geom TO read_only""")
+    conn.close()
+
+
+def remove_privileges(dbname, user_revoke,
+                      user_admin, password_admin,
+                      host, port=5432):
+    """Remove all privileges of a user within a particular database.
+
+    Args:
+        dbname (str): Name of the database.
+        user_revoke (str): User to revoke all privileges.
+        user_admin (str): Admin user to change the privileges.
+        password_admin (str): Passwort for the admin user.
+        host (str): Host of the database connection.
+        port (str): Port of the database connection.
+
+    Returns:
+        None.
+    """
+    conn = psycopg2.connect(dbname=dbname,
+                            user=user_admin, password=password_admin,
+                            host=host, port=port)
+    conn.autocommit = True
+    cursor = conn.cursor()
+    cursor.execute(f"""
+    REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM {user_revoke}
+    """)
+    conn.close()
