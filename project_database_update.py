@@ -15,8 +15,10 @@ https://github.com/history-unibas/Metadata-Historical-Land-Registry-Basel.
 3. If desired, data from the Transkribus platform is read and stored in the
 temporary database. Otherwise, data originating from Transkribus will be
 copied from the previous database to the temporary database (if a previous
-database exists). For more information on the Transkribus platform:
-https://github.com/history-unibas/Trankribus-API.
+database exists). Because the text line ordering within a given text region
+may not always be correct, a text line ordering algorithmus can be applied set
+the parameter CORRECT_LINE_ORDER to True. For more information on the
+Transkribus platform: https://github.com/history-unibas/Trankribus-API.
 
 4. If desired, project data tables are new created and filled. Otherwise, data
 will be copied from the previous database (if existent).
@@ -42,6 +44,8 @@ import pandas as pd
 import xml.etree.ElementTree as et
 import re
 import os
+import statistics
+
 
 from administrateDatabase import (
     delete_database, create_database, create_schema, rename_database,
@@ -71,6 +75,10 @@ URI_QUERY_METADATA = 'https://raw.githubusercontent.com/history-unibas/'\
     'Metadata-Historical-Land-Registry-Basel/main/queryMetadata.py'
 URI_CONNECT_TRANSKRIBUS = 'https://raw.githubusercontent.com/history-unibas/'\
     'Trankribus-API/main/connect_transkribus.py'
+
+# Define if the text line order within the Transkribus text regions should be
+# corrected.
+CORRECT_LINE_ORDER = True
 
 
 def download_script(url):
@@ -197,7 +205,8 @@ def processing_stabs(filepath_serie, filepath_dossier, dbname,
 
 def processing_transkribus(series_data, dossiers_data, dbname,
                            db_user, db_password,
-                           db_host, db_port=5432):
+                           db_host, db_port=5432,
+                           correct_line_order=False):
     """Processes the metadata of the HGB.
 
     This function processes all project database tables containing data from
@@ -214,6 +223,7 @@ def processing_transkribus(series_data, dossiers_data, dbname,
         db_password (str): Password for the database connection.
         db_host (str): Host of the database connection.
         db_port (str): Port of the database connection.
+        correct_line_order (bool): Define if text line order will be corrected.
 
     Returns:
         None.
@@ -386,26 +396,6 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                 for textregion in page_xml.iter(
                         '{http://schema.primaresearch.org/PAGE/gts/pagecontent'
                         '/2013-07-15}TextRegion'):
-                    # Find all unicode tag childs.
-                    unicode = textregion.findall(
-                        './/{http://schema.primaresearch.org/PAGE/gts/'
-                        'pagecontent/2013-07-15}Unicode')
-
-                    # Extract all text lines. Exclude last candidate,
-                    # correspond to the whole text of the region as well as
-                    # empty text lines.
-                    text_line = [item.text for item in unicode[:-1]
-                                 if bool(item.text)
-                                 ]
-                    if not text_line:
-                        # Skip empty textregions.
-                        continue
-
-                    # Create string of whole text region (not using last
-                    # candidate because it might be empty because of
-                    # Transkribus bug).
-                    text = '\n'.join(text_line)
-
                     # Determine type of text region.
                     textregion_custom = textregion.get('custom')
                     index_textregion = int(
@@ -418,7 +408,151 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                     else:
                         type_textregion = None
 
-                    # Get type of text region.
+                    if correct_line_order:
+                        # Correct the text line order.
+                        textregion_text = pd.DataFrame(
+                            columns=['text_line',
+                                     'min_x', 'max_x',
+                                     'min_y', 'max_y'
+                                     ])
+                        for textline in textregion.findall(
+                                './/{http://schema.primaresearch.org/PAGE/gts/'
+                                'pagecontent/2013-07-15}TextLine'):
+                            # Extract the transcripted text.
+                            textline_unicode = textline.find(
+                                './/{http://schema.primaresearch.org/PAGE/gts/'
+                                'pagecontent/2013-07-15}Unicode')
+                            if textline_unicode is not None:
+                                textline_text = textline_unicode.text
+                                if not textline_text:
+                                    # Skip empty text lines.
+                                    continue
+                            else:
+                                # Do not consider empty text lines.
+                                continue
+
+                            # Get the line coordinates.
+                            coords_raw = textline.find(
+                                './/{http://schema.primaresearch.org/PAGE/gts/'
+                                'pagecontent/2013-07-15}Coords').get('points')
+                            coords_list = coords_raw.split(' ')
+                            coord_x = []
+                            coord_y = []
+                            for coord in coords_list:
+                                coord_x.append(int(coord.split(',')[0]))
+                                coord_y.append(int(coord.split(',')[1]))
+
+                            # Determine the coordinaten boarders for each text
+                            # line.
+                            min_y = (statistics.mean(coord_y)
+                                     - (max(coord_y)
+                                     - statistics.mean(coord_y))/3)
+                            max_y = (statistics.mean(coord_y)
+                                     + (max(coord_y)
+                                     - statistics.mean(coord_y))/3)
+                            textregion_text = pd.concat(
+                                [textregion_text,
+                                 pd.DataFrame([
+                                    [textline_text,
+                                     min(coord_x), max(coord_x),
+                                     min_y, max_y]],
+                                    columns=['text_line',
+                                             'min_x', 'max_x',
+                                             'min_y', 'max_y'])
+                                 ], ignore_index=True)
+
+                        # Get the number of text lines.
+                        nlines = len(textregion_text)
+
+                        if nlines == 0:
+                            # Skip empty textregions.
+                            continue
+
+                        i = 1
+                        while i < nlines:
+                            # Analyse which text lines are on the same line.
+                            index_shared_y = [i - 1]
+                            while (
+                                max(textregion_text.iloc[i - 1]['min_y'],
+                                    textregion_text.iloc[i]['min_y'])
+                                < min(textregion_text.iloc[i - 1]['max_y'],
+                                      textregion_text.iloc[i]['max_y'])):
+                                index_shared_y.append(i)
+                                if i < nlines - 1:
+                                    i += 1
+                                else:
+                                    break
+
+                            if len(index_shared_y) > 1:
+                                # Get the correct order for the text lines.
+                                index_sorted_x = list(
+                                    textregion_text.loc[index_shared_y].
+                                    sort_values(by='min_x').index)
+
+                                if index_shared_y == index_sorted_x:
+                                    # Case text line order is correct.
+                                    i += 1
+                                    continue
+
+                                # Test if text lines do not have an overlap
+                                # horizontally.
+                                no_overlap = True
+                                index_line = 0
+                                while index_line < len(index_sorted_x) - 1:
+                                    if (textregion_text.iloc[
+                                            index_sorted_x[index_line]]
+                                            ['max_x']
+                                        >= textregion_text.iloc[
+                                            index_sorted_x[index_line + 1]]
+                                            ['min_x']):
+                                        no_overlap = False
+                                        break
+                                    else:
+                                        index_line += 1
+
+                                if no_overlap:
+                                    # Correct order of the text lines.
+                                    textregion_text.iloc[index_shared_y] = (
+                                        textregion_text.iloc[index_sorted_x]
+                                        .copy())
+                                    text_line_nr_changed = [
+                                        item + 1 for item in index_sorted_x]
+                                    logging.info(
+                                        'Correct text line order: '
+                                        f"document {row['title']} "
+                                        f"({row['docId']}), "
+                                        f"page number {page['pageNr']} "
+                                        f"({page['pageId']}), "
+                                        f'transcript {key_transcript}, '
+                                        f'text region type {type_textregion} '
+                                        f'(index {index_textregion}), '
+                                        'text line order changed for lines '
+                                        f'{text_line_nr_changed}'
+                                        )
+                            i += 1
+                        text_line = list(textregion_text['text_line'])
+
+                    else:
+                        # Do not correct the oder of the text lines.
+                        # Find all unicode tag childs.
+                        unicode = textregion.findall(
+                            './/{http://schema.primaresearch.org/PAGE/gts/'
+                            'pagecontent/2013-07-15}Unicode')
+
+                        # Extract all text lines. Exclude last candidate,
+                        # correspond to the whole text of the region as well as
+                        # empty text lines.
+                        text_line = [item.text for item in unicode[:-1]
+                                     if bool(item.text)
+                                     ]
+                        if not text_line:
+                            # Skip empty textregions.
+                            continue
+
+                    # Create string of whole text region.
+                    text = '\n'.join(text_line)
+
+                    # Get id of text region.
                     text_region_id = f'{key_transcript}_'\
                         f'{int(index_textregion):02}'
 
@@ -843,7 +977,8 @@ def main():
                                dossiers_data=dossiers_data,
                                dbname=dbname_temp,
                                db_user=DB_USER, db_password=db_password,
-                               db_host=DB_HOST, db_port=db_port
+                               db_host=DB_HOST, db_port=db_port,
+                               correct_line_order=CORRECT_LINE_ORDER
                                )
         logging.info('Transkribus data are processed.')
     elif db_exist:
