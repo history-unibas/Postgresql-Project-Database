@@ -49,7 +49,7 @@ import statistics
 
 from administrateDatabase import (
     delete_database, create_database, create_schema, rename_database,
-    copy_database, create_view, remove_privileges)
+    copy_database, remove_privileges)
 from connectDatabase import (populate_table, read_table, check_database_exist,
                              check_table_empty, check_dbtable_exist)
 
@@ -632,13 +632,17 @@ def get_validity_range(remark: str):
     return (year_from, year_to)
 
 
-def get_year(page_id, df_transcript, df_textregion):
-    """Extract the first occurrence of a year in header text regions.
+def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
+    """Extract the occurrence of a year in text regions of latest transcript.
 
-    Using the existing data in the project database, a year is extracted per
-    entry of the database table project_entry in the text regions of type
-    "header". The first occurrence of a year is taken into account.
-    If there is no header text region, None will be returned.
+    Using the existing data in the project database, a year of the pattern
+    "1[0-9]{3}" is extracted per entry of the database table project_entry.
+    - If a year of this pattern exist in the text regions "headers", the first
+    occurrence is taken into account.
+    - Otherwise, if a header contains the word "Zins", any first occurrence of
+    a year number of the same pattern will be returned. In this case, the page
+    is assumed to be part of the so called "Zinsverzeichnis".
+    - If there is no header text region, None will be returned.
 
         Args:
             page_id (list): List of page_id's of pages to be considered.
@@ -668,9 +672,24 @@ def get_year(page_id, df_transcript, df_textregion):
 
         # Search for first year occurance in header textregions.
         for header in tr_header.iterrows():
-            match = re.search(r'1[0-9]{3}', header[1]['text'])
+            match = re.search(year_pattern, header[1]['text'])
             if match:
                 return (int(match.group()), header[1]['textRegionId'])
+
+        # Search for year in text region "paragraph" when header text region
+        # contains the string "Zins".
+        for header in tr_header.iterrows():
+            match_header = re.search('Zins', header[1]['text'])
+            if match_header:
+                tr_paragraph = tr[tr['type'] == 'paragraph']
+                for paragraph in tr_paragraph.iterrows():
+                    match_paragraph = re.search(year_pattern,
+                                                paragraph[1]['text']
+                                                )
+                    if match_paragraph:
+                        return (int(match_paragraph.group()),
+                                paragraph[1]['textRegionId']
+                                )
 
     return (None, None)
 
@@ -740,8 +759,7 @@ def processing_project(dbname, db_password, db_user='postgres',
                           columns=['pageId', 'year', 'yearSource'])
              ], ignore_index=True)
 
-    # Search for first occurence in year in the header textregion of the
-    # latest page version.
+    # Search for occurence in year of the latest page version.
     entry[['year', 'yearSource']] = entry.apply(
         lambda row: get_year(page_id=row['pageId'],
                              df_transcript=transcript,
@@ -790,8 +808,9 @@ def import_shapefile(dbname, dbtable,
                                         host=db_host, port=db_port
                                         )
     if dbtable_exist:
-        logging.error(f'Table {dbtable} already exist in database {dbname}. '
-                      f'The shapefile {shapefile_path} will not be imported.')
+        logging.warning(f'Table {dbtable} already exist in database {dbname}. '
+                        f'The shapefile {shapefile_path} will not be imported.'
+                        )
     else:
         # Read the shapefile and write it in a new database table.
         connection = f'postgresql://{db_user}:{db_password}@'\
@@ -851,6 +870,52 @@ def processing_geodata(shapefile_path, shapefile_epsg,
         db_password=db_password, db_user=db_user,
         db_host=db_host, db_port=db_port
         )
+
+
+def create_view(dbname, user, password, host, port=5432):
+    """Create particular database view.
+
+    Args:
+        dbname (str): Name of the database.
+        user (str): Database user.
+        password (str): Passwort for database user.
+        host (str): Host of the database connection.
+        port (str): Port of the database connection.
+
+    Returns:
+        None.
+    """
+    view_name = 'transcript_date_geom'
+    dbview_exist = check_dbtable_exist(dbname=dbname, dbtable=view_name,
+                                       user=user, password=password,
+                                       host=host, port=port
+                                       )
+    if dbview_exist:
+        logging.warning(f'View {view_name} already exist in database {dbname}.'
+                        f' The view will not be new created.')
+    else:
+        conn = psycopg2.connect(dbname=dbname,
+                                user=user, password=password,
+                                host=host, port=port)
+        conn.autocommit = True
+        cursor = conn.cursor()
+        cursor.execute(f"""
+        CREATE VIEW {view_name} AS
+        SELECT
+            td.title AS HGB_Dossier, tp.pagenr AS Seite, tt.text AS Transkript,
+            tt.type AS Layout_Typ, pe."year" AS Jahr, ga.geom,
+            tp.urlimage AS Bild_Link
+        FROM transkribus_textregion tt
+        INNER JOIN transkribus_transcript tt2 ON tt."key" = tt2."key"
+        INNER JOIN transkribus_page tp ON tt2.pageid = tp.pageid
+        INNER JOIN project_entry pe ON tt2.pageid = pe.pageid[1]
+        INNER JOIN transkribus_document td ON tp.docid = td.docid
+        INNER JOIN stabs_dossier sd ON td.title = sd.dossierid
+        LEFT JOIN geo_address ga ON sd.stabsid = ga.signatur
+        """
+                       )
+        cursor.execute("""GRANT SELECT ON transcript_date_geom TO read_only""")
+        conn.close()
 
 
 def main():
