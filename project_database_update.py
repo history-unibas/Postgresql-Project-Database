@@ -639,9 +639,9 @@ def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
     "1[0-9]{3}" is extracted per entry of the database table project_entry.
     - If a year of this pattern exist in the text regions "headers", the first
     occurrence is taken into account.
-    - Otherwise, if a header contains the word "Zins", any first occurrence of
-    a year number of the same pattern will be returned. In this case, the page
-    is assumed to be part of the so called "Zinsverzeichnis".
+    - Otherwise, if a header contains the word like "Zins", any first
+    occurrence of a year number of the same pattern will be returned. In this
+    case, the page is assumed to be part of the so called "Zinsverzeichnis".
     - If there is no header text region, None will be returned.
 
         Args:
@@ -677,9 +677,9 @@ def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
                 return (int(match.group()), header[1]['textRegionId'])
 
         # Search for year in text region "paragraph" when header text region
-        # contains the string "Zins".
+        # contains a string like "Zins".
         for header in tr_header.iterrows():
-            match_header = re.search('Zins', header[1]['text'])
+            match_header = re.search(r'[Zz][iü]n[n]?s', header[1]['text'])
             if match_header:
                 tr_paragraph = tr[tr['type'] == 'paragraph']
                 for paragraph in tr_paragraph.iterrows():
