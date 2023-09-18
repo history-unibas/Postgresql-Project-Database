@@ -700,10 +700,15 @@ def processing_project(dbname, db_password, db_user='postgres',
 
     This function processes all tables of the project database with the prefix
     "project_". In particular:
-    - Determine the entries of the database table project_dossier.
-        - Search entries for yearFrom and yearTo based on descriptiveNote.
-    - Determine the entries of the database table project_entry.
-        - Search the year per entry of the the table project_entry.
+
+    1. Determine the entries of the database table project_dossier.
+    - Search entries for yearFrom and yearTo based on descriptiveNote.
+
+    2. Determine the entries of the database table project_entry. Based on the
+    most recent transcript, an HGB entry is interpreted to be on multiple
+    pages if the index card has no "header" and "marginalia" text region and
+    the page before it has no "credit" text region and is in the same document.
+    - Search the year per entry of the the table project_entry.
 
     Args:
         dbname (str): Name of the project database.
@@ -749,15 +754,41 @@ def processing_project(dbname, db_password, db_user='postgres',
         )
     dossier = dossier.drop('descriptiveNote', axis=1)
 
-    # Generate entries of table project_entry. Currently the entries in
-    # project_entry correspond to the entries in Transkribus_Page.
+    # Generate entries of table project_entry.
     entry = pd.DataFrame(columns=['pageId', 'year', 'yearSource'])
+    page_prev_has_credit = None
+    page_prev_docid = None
     for row in page.iterrows():
-        entry = pd.concat(
-            [entry,
-             pd.DataFrame([[[row[1]['pageId']], None, None]],
-                          columns=['pageId', 'year', 'yearSource'])
-             ], ignore_index=True)
+        # Determine latest transcript of current page.
+        ts = transcript[transcript['pageId'] == row[1]['pageId']]
+        ts_sorted = ts.sort_values(by='timestamp', ascending=False)
+        ts_latest = ts_sorted.iloc[0]
+
+        # Get the text regions of latest transcript.
+        tr = textregion[textregion['key'] == ts_latest['key']]
+        if (not tr.empty
+            and page_prev_has_credit is False
+            and page_prev_docid == row[1]['docId']
+            and not (any(tr['type'].isin(['marginalia']))
+                     and any(tr['type'].isin(['header']))
+                     )):
+            # The content of the current page is considered as same entry
+            # than on the previous page.
+            entry.iloc[-1]['pageId'] += [row[1]['pageId']]
+        else:
+            # The content of the current page is considered as new entry.
+            entry = pd.concat(
+                [entry,
+                 pd.DataFrame([[[row[1]['pageId']], None, None]],
+                              columns=['pageId', 'year', 'yearSource'])
+                 ], ignore_index=True)
+
+        # Set parameters for the next iteration.
+        if not tr.empty:
+            page_prev_has_credit = any(tr['type'].isin(['credit']))
+        else:
+            page_prev_has_credit = None
+        page_prev_docid = row[1]['docId']
 
     # Search for occurence in year of the latest page version.
     entry[['year', 'yearSource']] = entry.apply(
