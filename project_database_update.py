@@ -769,9 +769,8 @@ def processing_project(dbname, db_password, db_user='postgres',
         if (not tr.empty
             and page_prev_has_credit is False
             and page_prev_docid == row[1]['docId']
-            and not (any(tr['type'].isin(['marginalia']))
-                     and any(tr['type'].isin(['header']))
-                     )):
+            and not any(tr['type'].isin(['marginalia']))
+            and not any(tr['type'].isin(['header']))):
             # The content of the current page is considered as same entry
             # than on the previous page.
             entry.iloc[-1]['pageId'] += [row[1]['pageId']]
