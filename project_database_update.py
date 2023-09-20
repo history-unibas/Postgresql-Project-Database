@@ -708,6 +708,8 @@ def processing_project(dbname, db_password, db_user='postgres',
     most recent transcript, an HGB entry is interpreted to be on multiple
     pages if the index card has no "header" and "marginalia" text region and
     the page before it has no "credit" text region and is in the same document.
+    Pages without (non-empty) text regions and pages with status "DONE" are
+    excluded.
     - Search the year per entry of the the table project_entry.
 
     Args:
@@ -766,11 +768,13 @@ def processing_project(dbname, db_password, db_user='postgres',
 
         # Get the text regions of latest transcript.
         tr = textregion[textregion['key'] == ts_latest['key']]
-        if (not tr.empty
-            and page_prev_has_credit is False
-            and page_prev_docid == row[1]['docId']
-            and not any(tr['type'].isin(['marginalia']))
-            and not any(tr['type'].isin(['header']))):
+        if tr.empty or ts_latest['status'] == 'DONE':
+            # The content of current page is not considered to have a entry.
+            pass
+        elif (page_prev_has_credit is False
+              and page_prev_docid == row[1]['docId']
+              and not any(tr['type'].isin(['marginalia']))
+              and not any(tr['type'].isin(['header']))):
             # The content of the current page is considered as same entry
             # than on the previous page.
             entry.iloc[-1]['pageId'] += [row[1]['pageId']]
