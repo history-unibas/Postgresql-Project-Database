@@ -936,16 +936,23 @@ def create_view(dbname, user, password, host, port=5432):
         cursor.execute(f"""
         CREATE VIEW {view_name} AS
         SELECT
-            td.title AS HGB_Dossier, tp.pagenr AS Seite, tt.text AS Transkript,
-            tt.type AS Layout_Typ, pe."year" AS Jahr, ga.geom,
-            tp.urlimage AS Bild_Link
+            td.title AS hgb_dossier,
+            tp.pagenr AS seite,
+            tp.pageid,
+            tt.text AS transkript,
+            tt.type AS layout_typ,
+            (SELECT pe.year AS jahr
+                FROM project_entry pe
+                WHERE tp.pageid = ANY (pe.pageid)
+                ) AS jahr,
+            ga.geom,
+            tp.urlimage AS bild_link
         FROM transkribus_textregion tt
-        INNER JOIN transkribus_transcript tt2 ON tt."key" = tt2."key"
-        INNER JOIN transkribus_page tp ON tt2.pageid = tp.pageid
-        INNER JOIN project_entry pe ON tt2.pageid = pe.pageid[1]
-        INNER JOIN transkribus_document td ON tp.docid = td.docid
-        INNER JOIN stabs_dossier sd ON td.title = sd.dossierid
-        LEFT JOIN geo_address ga ON sd.stabsid = ga.signatur
+        JOIN transkribus_transcript tt2 ON tt.key::text = tt2.key::text
+        JOIN transkribus_page tp ON tt2.pageid = tp.pageid
+        JOIN transkribus_document td ON tp.docid = td.docid
+        JOIN stabs_dossier sd ON td.title::text = sd.dossierid::text
+        LEFT JOIN geo_address ga ON sd.stabsid::text = ga.signatur::text
         """
                        )
         cursor.execute("""GRANT SELECT ON transcript_date_geom TO read_only""")
@@ -1260,8 +1267,7 @@ def main():
 
     datetime_ended = datetime.now()
     datetime_duration = datetime_ended - datetime_started
-    logging.info('Duration of the run: '
-                 f'{str(round(datetime_duration.seconds / 3600, 1))} hour(s).')
+    logging.info(f'Duration of the run: {str(datetime_duration)}.')
     logging.info('Script finished.')
 
 
