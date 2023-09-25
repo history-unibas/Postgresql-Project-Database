@@ -442,7 +442,7 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                                 coord_x.append(int(coord.split(',')[0]))
                                 coord_y.append(int(coord.split(',')[1]))
 
-                            # Determine the coordinaten boarders for each text
+                            # Determine the coordinate boarders for each text
                             # line.
                             min_y = (statistics.mean(coord_y)
                                      - (max(coord_y)
@@ -760,6 +760,7 @@ def processing_project(dbname, db_password, db_user='postgres',
     entry = pd.DataFrame(columns=['pageId', 'year', 'yearSource'])
     page_prev_has_credit = None
     page_prev_docid = None
+    page_prev_status = None
     for row in page.iterrows():
         # Determine latest transcript of current page.
         ts = transcript[transcript['pageId'] == row[1]['pageId']]
@@ -773,6 +774,7 @@ def processing_project(dbname, db_password, db_user='postgres',
             pass
         elif (page_prev_has_credit is False
               and page_prev_docid == row[1]['docId']
+              and page_prev_status != 'DONE'
               and not any(tr['type'].isin(['marginalia']))
               and not any(tr['type'].isin(['header']))):
             # The content of the current page is considered as same entry
@@ -792,6 +794,7 @@ def processing_project(dbname, db_password, db_user='postgres',
         else:
             page_prev_has_credit = None
         page_prev_docid = row[1]['docId']
+        page_prev_status = ts_latest['status']
 
     # Search for occurence in year of the latest page version.
     entry[['year', 'yearSource']] = entry.apply(
