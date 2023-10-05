@@ -174,6 +174,9 @@ def main():
                           index=False, header=True)
 
     # Analyze the time period for each HGB dossier.
+    dossier['yearFrom_entry'] = None
+    dossier['yearTo_entry'] = None
+    dossier['note'] = None
     for index, row in dossier.iterrows():
         dossier_id = document[
             document['title'] == row['dossierId']]['docId']
