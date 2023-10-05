@@ -198,11 +198,14 @@ def main():
         if (not math.isnan(dossier.at[index, 'yearFrom_stabs'])
                 and not math.isnan(dossier.at[index, 'yearFrom_entry'])
                 and dossier.at[index, 'yearFrom_stabs'] != yearfrom_entry):
-            dossier.at[index, 'note'] = 'YearFrom differs. '
+            dossier.at[index, 'note'] = 'YearFrom differs.'
         if (not math.isnan(dossier.at[index, 'yearTo_stabs'])
                 and not math.isnan(dossier.at[index, 'yearTo_entry'])
                 and dossier.at[index, 'yearTo_stabs'] != yearto_entry):
-            dossier.at[index, 'note'] += 'YearTo differs.'
+            if dossier.at[index, 'note']:
+                dossier.at[index, 'note'] += ' YearTo differs.'
+            else:
+                dossier.at[index, 'note'] = 'YearTo differs.'
 
     # Export the results.
     dossier.to_csv(FILEPATH_ANALYSIS + '/year_analysis_dossier.csv',
