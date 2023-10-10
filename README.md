@@ -73,6 +73,7 @@ This entity is currently being further developed.
 | pageId | INTEGER[] | yes |  | List of associated Transkribus page id's |
 | year | SMALLINT | no |  | First year detected in header text regions of latest transcript version |
 | yearSource | VARCHAR(40) | no | FOREIGN KEY | Identifier of text region (textRegionId) of the detected year number |
+| comment | VARCHAR(100) | no |  | Note |
 
 ### Transkribus_Collection
 Elements of the Transkribus_Collection entity represent a street and are stored as collection on Transkribus.

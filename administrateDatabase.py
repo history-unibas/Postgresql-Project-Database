@@ -109,7 +109,8 @@ def create_schema(dbname, user, password, host, port=5432):
         entryId UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
         pageId INTEGER[] NOT NULL,
         year SMALLINT,
-        yearSource VARCHAR(40) REFERENCES Transkribus_TextRegion(textRegionId))
+        yearSource VARCHAR(40) REFERENCES Transkribus_TextRegion(textRegionId),
+        comment VARCHAR(100))
     """
                    )
 

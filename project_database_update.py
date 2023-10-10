@@ -33,6 +33,8 @@ and not copied from the previous database.
 8. Create a copy of temporary database to new database.
 
 9. Temporary database is renamed with date as postfix.
+
+10. Create a backup file.
 """
 
 
@@ -45,6 +47,7 @@ import xml.etree.ElementTree as et
 import re
 import os
 import statistics
+import math
 
 
 from administrateDatabase import (
@@ -79,6 +82,15 @@ URI_CONNECT_TRANSKRIBUS = 'https://raw.githubusercontent.com/history-unibas/'\
 # Define if the text line order within the Transkribus text regions should be
 # corrected.
 CORRECT_LINE_ORDER = True
+
+# Define if correction file for project_entry should be applied.
+CORRECT_PROJECT_ENTRY = True
+
+# File of correction file for project_entry.
+FILEPATH_PROJECT_ENTRY_CORR = './data/datetool_202310091507.csv'
+
+# Define direction of the backup file.
+BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
 
 
 def download_script(url):
@@ -695,7 +707,9 @@ def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
 
 
 def processing_project(dbname, db_password, db_user='postgres',
-                       db_host='localhost', db_port=5432):
+                       db_host='localhost', db_port=5432,
+                       correct_entry=False,
+                       filepath_corr=''):
     """Processes the project data within the project database.
 
     This function processes all tables of the project database with the prefix
@@ -711,6 +725,16 @@ def processing_project(dbname, db_password, db_user='postgres',
     Pages without (non-empty) text regions and pages with status "DONE" are
     excluded.
     - Search the year per entry of the the table project_entry.
+    If a correction CSV file is provided, the following manipulations can
+    override the usual logic based on the pageid:
+    - If the column "omit" is True, the page will be omitted for the entity
+    project_entry.
+    - If the column "datum_neu" contains a value, so this year is taken as the
+    date. The correction filepath is saved as yearSource.
+    - If the column "ist_folgeseite" is True, the page will be treated as same
+    entry than on the previous page.
+    - If the column "kommentar" contains a value, the value will be mapped to
+    the column "comment".
 
     Args:
         dbname (str): Name of the project database.
@@ -718,6 +742,9 @@ def processing_project(dbname, db_password, db_user='postgres',
         db_user (str): User of the database connection.
         db_host (str): Host of the database connection.
         db_port (int,str): Port of the database connection.
+        correct_entry (bool): Defines whether a correction file should
+        be applied.
+        filepath_corr (str): Filepath of the correction file.
 
     Returns:
         None.
@@ -756,12 +783,21 @@ def processing_project(dbname, db_password, db_user='postgres',
         )
     dossier = dossier.drop('descriptiveNote', axis=1)
 
+    # Read the entries to correct.
+    if correct_entry:
+        entry_correction = pd.read_csv(filepath_corr)
+
     # Generate entries of table project_entry.
-    entry = pd.DataFrame(columns=['pageId', 'year', 'yearSource'])
+    entry = pd.DataFrame(columns=['pageId', 'year', 'yearSource', 'comment'])
     page_prev_has_credit = None
     page_prev_docid = None
     page_prev_status = None
     for row in page.iterrows():
+        # Determine corrections if requested.
+        if correct_entry:
+            page_corr = entry_correction[
+                row[1]['pageId'] == entry_correction['pageid']]
+
         # Determine latest transcript of current page.
         ts = transcript[transcript['pageId'] == row[1]['pageId']]
         ts_sorted = ts.sort_values(by='timestamp', ascending=False)
@@ -772,6 +808,17 @@ def processing_project(dbname, db_password, db_user='postgres',
         if tr.empty or ts_latest['status'] == 'DONE':
             # The content of current page is not considered to have a entry.
             pass
+        elif (correct_entry
+              and not page_corr.empty
+              and page_corr['omit'].values[0]):
+            # The current page is omitted for entity project_entry.
+            pass
+        elif (correct_entry
+              and not page_corr.empty
+              and page_corr['ist_folgeseite'].values[0]):
+            # The content of the current page is considered as same entry
+            # than on the previous page.
+            entry.iloc[-1]['pageId'] += [row[1]['pageId']]
         elif (page_prev_has_credit is False
               and page_prev_docid == row[1]['docId']
               and page_prev_status != 'DONE'
@@ -784,8 +831,9 @@ def processing_project(dbname, db_password, db_user='postgres',
             # The content of the current page is considered as new entry.
             entry = pd.concat(
                 [entry,
-                 pd.DataFrame([[[row[1]['pageId']], None, None]],
-                              columns=['pageId', 'year', 'yearSource'])
+                 pd.DataFrame([[[row[1]['pageId']], None, None, None]],
+                              columns=['pageId', 'year', 'yearSource',
+                                       'comment'])
                  ], ignore_index=True)
 
         # Set parameters for the next iteration.
@@ -804,6 +852,19 @@ def processing_project(dbname, db_password, db_user='postgres',
         axis=1,
         result_type='expand'
         )
+
+    # Correct years and add comments if requested.
+    if correct_entry:
+        for row in entry_correction.iterrows():
+            entry_match = entry[
+                    entry['pageId'].apply(lambda x: row[1]['pageid'] in x)]
+            if not math.isnan(row[1]['datum_neu']):
+                # Update year and yearSource.
+                entry.loc[entry_match.index, ['year', 'yearSource']] = [
+                    row[1]['datum_neu'], None]
+            if isinstance(row[1]['kommentar'], str):
+                # Copy the comment.
+                entry.loc[entry_match.index, 'comment'] = row[1]['kommentar']
 
     # Write data created to project database.
     populate_table(df=dossier, dbname=dbname, dbtable='project_dossier',
@@ -1193,7 +1254,9 @@ def main():
                                db_password=db_password,
                                db_user=DB_USER,
                                db_host=DB_HOST,
-                               db_port=db_port
+                               db_port=db_port,
+                               correct_entry=CORRECT_PROJECT_ENTRY,
+                               filepath_corr=FILEPATH_PROJECT_ENTRY_CORR
                                )
             logging.info('Project data are processed.')
         elif db_exist:
@@ -1213,8 +1276,9 @@ def main():
             cursor.execute(f"""
             INSERT INTO project_entry
             SELECT * FROM dblink('{dblink_connname}',
-            'SELECT entryid,pageid,year,yearsource FROM project_entry')
-            AS t(entryid uuid, pageid integer[], year integer, yearsource text)
+            'SELECT entryid,pageid,year,yearsource,comment FROM project_entry')
+            AS t(entryid uuid, pageid integer[], year integer, yearsource text,
+            comment text)
             """)
             conn.close()
             logging.info('Project data are copied from current database.')
@@ -1234,6 +1298,36 @@ def main():
                 user=DB_USER, password=db_password,
                 host=DB_HOST, port=db_port
                 )
+
+    # Create table stabs_klingental_regest.
+    table_name = 'stabs_klingental_regest'
+    dbtable_exist = check_dbtable_exist(dbname=dbname_temp, dbtable=table_name,
+                                        user=DB_USER, password=db_password,
+                                        host=DB_HOST, port=db_port
+                                        )
+    if dbtable_exist:
+        logging.warning(f'Table {table_name} already exist in database '
+                        f'{dbname_temp}. The table will not be new created.')
+    elif db_exist:
+        # Copy existing project table from database DB_NAME to dbname_temp.
+        conn = psycopg2.connect(dbname=dbname_temp,
+                                user=DB_USER, password=db_password,
+                                host=DB_HOST, port=db_port
+                                )
+        conn.autocommit = True
+        cursor = conn.cursor()
+        cursor.execute(f"""
+        INSERT INTO {table_name}
+        SELECT * FROM dblink('{dblink_connname}',
+        'SELECT link,identifier,title,type,isassociatedwithdate,note,date
+        FROM {table_name}')
+        AS t(link text, identifier text, title text, type text,
+        isassociatedwithdate text, note text, date text)
+        """)
+        conn.close()
+        logging.info('Table {table_name} are copied from current database.')
+    else:
+        logging.warning('Table {table_name} is not available in database.')
 
     # Delete existing database.
     if db_exist:
@@ -1267,6 +1361,15 @@ def main():
     remove_privileges(dbname=dbname_copy, user_revoke='read_only',
                       user_admin=DB_USER, password_admin=db_password,
                       host=DB_HOST, port=db_port)
+
+    # Create backup of database.
+    command = f'pg_dump -d {dbname_copy} -F p ' + \
+        f'-f {BACKUP_DIR}/dump_{dbname_copy}.sql'
+    result = os.system(command)
+    if result == 0:
+        logging.info(f'Backup of {dbname_copy} was created.')
+    else:
+        logging.error(f'Backup of {dbname_copy} failed: {result}.')
 
     datetime_ended = datetime.now()
     datetime_duration = datetime_ended - datetime_started
