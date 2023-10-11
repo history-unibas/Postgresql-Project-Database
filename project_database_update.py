@@ -1299,36 +1299,6 @@ def main():
                 host=DB_HOST, port=db_port
                 )
 
-    # Create table stabs_klingental_regest.
-    table_name = 'stabs_klingental_regest'
-    dbtable_exist = check_dbtable_exist(dbname=dbname_temp, dbtable=table_name,
-                                        user=DB_USER, password=db_password,
-                                        host=DB_HOST, port=db_port
-                                        )
-    if dbtable_exist:
-        logging.warning(f'Table {table_name} already exist in database '
-                        f'{dbname_temp}. The table will not be new created.')
-    elif db_exist:
-        # Copy existing project table from database DB_NAME to dbname_temp.
-        conn = psycopg2.connect(dbname=dbname_temp,
-                                user=DB_USER, password=db_password,
-                                host=DB_HOST, port=db_port
-                                )
-        conn.autocommit = True
-        cursor = conn.cursor()
-        cursor.execute(f"""
-        INSERT INTO {table_name}
-        SELECT * FROM dblink('{dblink_connname}',
-        'SELECT link,identifier,title,type,isassociatedwithdate,note,date
-        FROM {table_name}')
-        AS t(link text, identifier text, title text, type text,
-        isassociatedwithdate text, note text, date text)
-        """)
-        conn.close()
-        logging.info('Table {table_name} are copied from current database.')
-    else:
-        logging.warning('Table {table_name} is not available in database.')
-
     # Delete existing database.
     if db_exist:
         try:
