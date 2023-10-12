@@ -100,8 +100,10 @@ def create_schema(dbname, user, password, host, port=5432):
     cursor.execute("""
     CREATE TABLE Project_Dossier(
         dossierId VARCHAR(15) PRIMARY KEY REFERENCES StABS_Dossier(dossierId),
-        yearFrom SMALLINT,
-        yearTo SMALLINT)
+        yearFrom1 SMALLINT,
+        yearTo1 SMALLINT,
+        yearFrom2 SMALLINT,
+        yearTo2 SMALLINT)
     """
                    )
     cursor.execute("""

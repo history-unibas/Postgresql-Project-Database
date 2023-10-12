@@ -716,7 +716,7 @@ def processing_project(dbname, db_password, db_user='postgres',
     "project_". In particular:
 
     1. Determine the entries of the database table project_dossier.
-    - Search entries for yearFrom and yearTo based on descriptiveNote.
+    - Search entries for yearFrom1 and yearTo1 based on descriptiveNote.
 
     2. Determine the entries of the database table project_entry. Based on the
     most recent transcript, an HGB entry is interpreted to be on multiple
@@ -776,12 +776,13 @@ def processing_project(dbname, db_password, db_user='postgres',
 
     # Determine the data for the entity project_dossier.
     dossier = stabs_dossier[['dossierId', 'descriptiveNote']].copy()
-    dossier[['yearFrom', 'yearTo']] = dossier.apply(
+    dossier[['yearFrom1', 'yearTo1']] = dossier.apply(
         lambda row: get_validity_range(row['descriptiveNote']),
         axis=1,
         result_type='expand'
         )
     dossier = dossier.drop('descriptiveNote', axis=1)
+    dossier[['yearFrom2', 'yearTo2']] = [None, None]
 
     # Read the entries to correct.
     if correct_entry:
@@ -1270,8 +1271,10 @@ def main():
             cursor.execute(f"""
             INSERT INTO project_dossier
             SELECT * FROM dblink('{dblink_connname}',
-            'SELECT dossierid,yearfrom,yearto FROM project_dossier')
-            AS t(dossierid text, yearfrom integer, yearto integer)
+            'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2
+            FROM project_dossier')
+            AS t(dossierid text, yearfrom1 integer, yearto1 integer,
+            yearfrom2 integer, yearto2 integer)
             """)
             cursor.execute(f"""
             INSERT INTO project_entry

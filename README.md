@@ -59,8 +59,10 @@ This entity is currently being further developed.
 | **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
 |---------------|---------------|---------------|---------------|---------------|
 | dossierId | VARCHAR(15) | yes | PRIMARY KEY, FOREIGN KEY | Identifier of dossier |
-| yearFrom | SMALLINT | no |  | Year from when dossier is valid based on StABS_Dossier.descriptiveNote |
-| yearTo | SMALLINT | no |  | Year until when dossier is valid based on StABS_Dossier.descriptiveNote |
+| yearFrom1 | SMALLINT | no |  | Year from when dossier is valid based on StABS_Dossier.descriptiveNote (first time interval)|
+| yearTo1 | SMALLINT | no |  | Year until when dossier is valid based on StABS_Dossier.descriptiveNote (first time interval)|
+| yearFrom2 | SMALLINT | no |  | Year from of second time interval when dossier is valid |
+| yearTo2 | SMALLINT | no |  | Year until of second time interval when dossier is valid |
 
 ### Project_Entry
 Elements of the Project_Entry table represent an entry recorded in the HGB. Several entries can be documented on one register card of the HGB or one entry can extend over several pages/register cards. A page in the HGB is represented by an element in the table Transkribus_Page.
@@ -71,9 +73,9 @@ This entity is currently being further developed.
 |---------------|---------------|---------------|---------------|---------------|
 | entryId | UUID | yes | PRIMARY KEY | Identifier project entry |
 | pageId | INTEGER[] | yes |  | List of associated Transkribus page id's |
-| year | SMALLINT | no |  | First year detected in header text regions of latest transcript version |
-| yearSource | VARCHAR(40) | no | FOREIGN KEY | Identifier of text region (textRegionId) of the detected year number |
-| comment | VARCHAR(100) | no |  | Note |
+| year | SMALLINT | no |  | First year detected in header text regions of latest transcript version or manually identified year |
+| yearSource | VARCHAR(40) | no | FOREIGN KEY | Identifier of text region (textRegionId) of the detected year number (if year is automatically identified)|
+| comment | VARCHAR(100) | no |  | Manually added note |
 
 ### Transkribus_Collection
 Elements of the Transkribus_Collection entity represent a street and are stored as collection on Transkribus.
