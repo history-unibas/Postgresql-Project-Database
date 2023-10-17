@@ -119,7 +119,8 @@ def download_script(url):
 download_script(URI_QUERY_METADATA)
 download_script(URI_CONNECT_TRANSKRIBUS)
 from queryMetadata import (query_series, get_series, get_serie_id,
-                           get_dossiers, get_dossier_id)
+                           get_dossiers, get_dossier_id,
+                           query_documents, get_date)
 from connect_transkribus import (get_sid, list_collections, list_documents,
                                  get_document_content, get_page_xml)
 
@@ -146,10 +147,13 @@ def do_process(prompt: str) -> bool:
 def processing_stabs(filepath_serie, filepath_dossier, dbname,
                      db_user, db_password,
                      db_host, db_port=5432):
-    """Processes the metadata of the HGB.
+    """Process metadata of the State Archives of Basel.
 
-    This function processes all series and dossiers of the HGB and write them
-    to the project database. In addition, CSV files will be written.
+    This function processes all series and dossiers of the Historical Land
+    Registry (HGB) and write them to the project database. In addition, CSV
+    files thereof will be written.
+    Furthermore, metadata of the documents containing in the Serie "Regesten
+    Klingental" are queried and stored in the database.
 
     Args:
         filepath_serie (str): Filepath of destination csv containing series.
@@ -213,6 +217,21 @@ def processing_stabs(filepath_serie, filepath_dossier, dbname,
     # Write data created to csv.
     series_data.to_csv(filepath_serie, index=False, header=True)
     all_dossiers.to_csv(filepath_dossier, index=False, header=True)
+
+    # Get and write documents of the serie "Regesten Klingental".
+    url_klingental_regest = 'https://ld.bs.ch/ais/Record/751516'
+    klingental_regest = pd.DataFrame(query_documents(url_klingental_regest))
+    klingental_regest['expresseddate'] = klingental_regest.apply(
+        lambda row: get_date(row['isassociatedwithdate']), axis=1
+        )
+    klingental_regest = klingental_regest.drop(
+        ['isassociatedwithdate', 'type'], axis=1
+        )
+    populate_table(df=klingental_regest, dbname=dbname,
+                   dbtable='stabs_klingental_regest',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port
+                   )
 
 
 def processing_transkribus(series_data, dossiers_data, dbname,
@@ -784,6 +803,12 @@ def processing_project(dbname, db_password, db_user='postgres',
     dossier = dossier.drop('descriptiveNote', axis=1)
     dossier[['yearFrom2', 'yearTo2']] = [None, None]
 
+    # Write data created to project database.
+    populate_table(df=dossier, dbname=dbname, dbtable='project_dossier',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port
+                   )
+
     # Read the entries to correct.
     if correct_entry:
         entry_correction = pd.read_csv(filepath_corr)
@@ -868,10 +893,6 @@ def processing_project(dbname, db_password, db_user='postgres',
                 entry.loc[entry_match.index, 'comment'] = row[1]['kommentar']
 
     # Write data created to project database.
-    populate_table(df=dossier, dbname=dbname, dbtable='project_dossier',
-                   user=db_user, password=db_password,
-                   host=db_host, port=db_port
-                   )
     populate_table(df=entry, dbname=dbname, dbtable='project_entry',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port
@@ -1132,6 +1153,14 @@ def main():
             AS t(dossierid text, serieid text, stabsid text, title text,
             link text, housename text, oldhousenumber text, owner1862 text,
             descriptivenote text)
+            """)
+            cursor.execute(f"""
+            INSERT INTO stabs_klingental_regest
+            SELECT * FROM dblink('{dblink_connname}',
+            'SELECT link,identifier,title,descriptivenote,expresseddate
+            FROM stabs_klingental_regest')
+            AS t(link text, identifier text, title text, descriptivenote text,
+            expresseddate text)
             """)
             conn.close()
             logging.info('Metadata are copied from current database.')

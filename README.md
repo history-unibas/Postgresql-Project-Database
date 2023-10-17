@@ -51,6 +51,17 @@ Elements of the entity StABS_Dossier represent a building, address or further in
 | owner1862 | VARCHAR(100) | no |  | Owner of the house in the year 1862 |
 | descriptiveNote | VARCHAR(600) | no |  | Remarks |
 
+### StABS_Klingental_Regest
+This entity contains metadata from the State Archives on the "Regesten Klingental" series.
+
+| **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
+|---------------|---------------|---------------|---------------|---------------|
+| link | VARCHAR(50) | yes | PRIMARY KEY | URI of the linked open data entry of the State Archives |
+| identifier | VARCHAR(100) | yes |  | Identifier of the State Archives |
+| title | VARCHAR(1000) | yes |  | Title of the document |
+| descriptiveNote | VARCHAR(300) | no |  | Remarks |
+| expressedDate | VARCHAR(50) | yes |  | Expressed date of the document |
+
 ### Project_Dossier
 Elements of the Project_Dossier table represent a dossier of HGB analogous to the elements in the entity StABS_Dossier. Currently, Project_Dossier contains attributes that are derived from attributes of StABS_Dossier.
 

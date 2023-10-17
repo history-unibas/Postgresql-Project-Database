@@ -58,12 +58,13 @@ def main():
         read_table(dbname=DB_NAME, dbtable='project_entry',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
-        columns=['entryId', 'pageId', 'year', 'yearSource'])
+        columns=['entryId', 'pageId', 'year', 'yearSource', 'comment'])
     dossier = pd.DataFrame(
         read_table(dbname=DB_NAME, dbtable='project_dossier',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
-        columns=['dossierId', 'yearFrom_stabs', 'yearTo_stabs'])
+        columns=['dossierId', 'yearFrom_stabs', 'yearTo_stabs',
+                 'yearFrom2', 'yearTo2'])
     document = pd.DataFrame(
         read_table(dbname=DB_NAME, dbtable='transkribus_document',
                    user=db_user, password=db_password,
