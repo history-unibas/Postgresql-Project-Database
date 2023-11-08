@@ -179,7 +179,7 @@ def create_schema(dbname, user, password, host, port=5432):
 
     # Create read only user.
     try:
-        cursor.execute('CREATE USER read_only WITH PASSWORD "read_only"')
+        cursor.execute("CREATE USER read_only WITH PASSWORD 'read_only'")
     except Exception as err:
         logging.warning(f'{err=}, {type(err)=}')
     cursor.execute('GRANT SELECT ON ALL TABLES IN SCHEMA public TO read_only')

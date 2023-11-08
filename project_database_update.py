@@ -204,6 +204,7 @@ def processing_stabs(filepath_serie, filepath_dossier, dbname,
     # Generate the "project_id" of the dossiers.
     all_dossiers['dossierId'] = all_dossiers.apply(
         lambda row: get_dossier_id(row['stabsId']), axis=1)
+    logging.info('Dossiers queried.')
 
     # Write data created to project database.
     populate_table(df=series_data, dbname=dbname, dbtable='stabs_serie',
@@ -219,6 +220,7 @@ def processing_stabs(filepath_serie, filepath_dossier, dbname,
     all_dossiers.to_csv(filepath_dossier, index=False, header=True)
 
     # Get and write documents of the serie "Regesten Klingental".
+    logging.info('Query Klingental regest...')
     url_klingental_regest = 'https://ld.bs.ch/ais/Record/751516'
     klingental_regest = pd.DataFrame(query_documents(url_klingental_regest))
     klingental_regest['expresseddate'] = klingental_regest.apply(
@@ -232,6 +234,7 @@ def processing_stabs(filepath_serie, filepath_dossier, dbname,
                    user=db_user, password=db_password,
                    host=db_host, port=db_port
                    )
+    logging.info('Klingental regest queried.')
 
 
 def processing_transkribus(series_data, dossiers_data, dbname,
