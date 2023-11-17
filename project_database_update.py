@@ -318,7 +318,7 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                        host=db_host, port=db_port
                        )
 
-    # Get documents accoring project database schema for each collection
+    # Get documents according project database schema for each collection
     # considered.
     all_doc = pd.DataFrame(columns=['docId', 'colId', 'title', 'nrOfPages'])
     for index, row in coll.iterrows():
@@ -332,7 +332,7 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                                 doc['title'], doc['nrOfPages']]],
                               columns=['docId', 'colId', 'title', 'nrOfPages']
                               )], ignore_index=True)
-        n_documents = len(all_doc)
+    n_documents = len(all_doc)
 
     # Analyse which documents where skipped.
     test = all_doc.merge(dossiers_data, how='left',
