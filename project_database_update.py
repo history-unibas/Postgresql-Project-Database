@@ -83,11 +83,12 @@ URI_CONNECT_TRANSKRIBUS = 'https://raw.githubusercontent.com/history-unibas/'\
 # corrected.
 CORRECT_LINE_ORDER = True
 
-# Define if correction file for project_entry should be applied.
+# Define if specific correction files for project_entry should be applied.
 CORRECT_PROJECT_ENTRY = True
 
-# File of correction file for project_entry.
-FILEPATH_PROJECT_ENTRY_CORR = './data/datetool_202310160753.csv'
+# Filepath of correction files for project_entry.
+FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202310160753.csv'
+FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202311210925.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
@@ -731,7 +732,8 @@ def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
 def processing_project(dbname, db_password, db_user='postgres',
                        db_host='localhost', db_port=5432,
                        correct_entry=False,
-                       filepath_corr=''):
+                       filepath_corr1='',
+                       filepath_corr2=''):
     """Processes the project data within the project database.
 
     This function processes all tables of the project database with the prefix
@@ -747,16 +749,30 @@ def processing_project(dbname, db_password, db_user='postgres',
     Pages without (non-empty) text regions and pages with status "DONE" are
     excluded.
     - Search the year per entry of the the table project_entry.
-    If a correction CSV file is provided, the following manipulations can
-    override the usual logic based on the pageid:
+
+    If correction CSV files are provided, the correction file 1 can override
+    the usual logic based on the pageid:
     - If the column "omit" is True, the page will be omitted for the entity
     project_entry.
     - If the column "datum_neu" contains a value, so this year is taken as the
-    date. The correction filepath is saved as yearSource.
+    date.
     - If the column "ist_folgeseite" is True, the page will be treated as same
     entry than on the previous page.
     - If the column "kommentar" contains a value, the value will be mapped to
     the column "comment".
+    As the correction file 1, the correction file 2 override the usual logic
+    as well as corrections provided in correction file 1 based on the pageid:
+    - If the column "omit" is True, the page will be omitted for the entity
+    project_entry.
+    - If the column "datum_neu" contains a value, so this year is taken as
+    date.
+    - If the column "kommentar" contains the value "skipped: Folgeseite", the
+    page will be treated as same entry than on the previous page.
+    - If the column "kommentar" contains the value "skipped: undatiert ", the
+    columns year and yearSource will be set to None and the column comment
+    will get the value "undatiert".
+    - If the column "kommentar" contains another value than considered above,
+    the value will be mapped to the column "comment".
 
     Args:
         dbname (str): Name of the project database.
@@ -766,7 +782,8 @@ def processing_project(dbname, db_password, db_user='postgres',
         db_port (int,str): Port of the database connection.
         correct_entry (bool): Defines whether a correction file should
         be applied.
-        filepath_corr (str): Filepath of the correction file.
+        filepath_corr1 (str): Filepath of the first correction file.
+        filepath_corr2 (str): Filepath of the second correction file.
 
     Returns:
         None.
@@ -814,7 +831,8 @@ def processing_project(dbname, db_password, db_user='postgres',
 
     # Read the entries to correct.
     if correct_entry:
-        entry_correction = pd.read_csv(filepath_corr)
+        entry_correction1 = pd.read_csv(filepath_corr1)
+        entry_correction2 = pd.read_csv(filepath_corr2)
 
     # Generate entries of table project_entry.
     entry = pd.DataFrame(columns=['pageId', 'year', 'yearSource', 'comment'])
@@ -824,8 +842,10 @@ def processing_project(dbname, db_password, db_user='postgres',
     for row in page.iterrows():
         # Determine corrections if requested.
         if correct_entry:
-            page_corr = entry_correction[
-                row[1]['pageId'] == entry_correction['pageid']]
+            page_corr1 = entry_correction1[
+                row[1]['pageId'] == entry_correction1['pageid']]
+            page_corr2 = entry_correction2[
+                row[1]['pageId'] == entry_correction2['pageid']]
 
         # Determine latest transcript of current page.
         ts = transcript[transcript['pageId'] == row[1]['pageId']]
@@ -838,13 +858,16 @@ def processing_project(dbname, db_password, db_user='postgres',
             # The content of current page is not considered to have a entry.
             pass
         elif (correct_entry
-              and not page_corr.empty
-              and page_corr['omit'].values[0]):
+              and (not page_corr1.empty and page_corr1['omit'].values[0])
+              or (not page_corr2.empty and page_corr2['omit'].values[0])):
             # The current page is omitted for entity project_entry.
             pass
         elif (correct_entry
-              and not page_corr.empty
-              and page_corr['ist_folgeseite'].values[0]):
+              and (not page_corr1.empty
+                   and page_corr1['ist_folgeseite'].values[0])
+              or (not page_corr2.empty
+                  and (page_corr2['kommentar'].values[0] ==
+                       'skipped: Folgeseite'))):
             # The content of the current page is considered as same entry
             # than on the previous page.
             entry.iloc[-1]['pageId'] += [row[1]['pageId']]
@@ -884,7 +907,7 @@ def processing_project(dbname, db_password, db_user='postgres',
 
     # Correct years and add comments if requested.
     if correct_entry:
-        for row in entry_correction.iterrows():
+        for row in entry_correction1.iterrows():
             entry_match = entry[
                     entry['pageId'].apply(lambda x: row[1]['pageid'] in x)]
             if not math.isnan(row[1]['datum_neu']):
@@ -894,6 +917,29 @@ def processing_project(dbname, db_password, db_user='postgres',
             if isinstance(row[1]['kommentar'], str):
                 # Copy the comment.
                 entry.loc[entry_match.index, 'comment'] = row[1]['kommentar']
+
+        for row in entry_correction2.iterrows():
+            entry_match = entry[
+                    entry['pageId'].apply(lambda x: row[1]['pageid'] in x)]
+            if entry_match.empty:
+                continue
+            if not math.isnan(row[1]['datum_neu']):
+                # Update year and yearSource.
+                entry.loc[entry_match.index, ['year', 'yearSource']] = [
+                    row[1]['datum_neu'], None]
+            if isinstance(row[1]['kommentar'], str):
+                if row[1]['kommentar'] == 'skipped: undatiert ':
+                    # Remove date and add comment.
+                    entry.loc[entry_match.index, ['year', 'yearSource']] = [
+                        None, None]
+                    entry.loc[entry_match.index, 'comment'] = 'undatiert'
+                elif row[1]['kommentar'] == 'skipped: Folgeseite':
+                    # Ignore the comment in this case.
+                    pass
+                else:
+                    # Copy the comment.
+                    entry.loc[entry_match.index, 'comment'] = row[1][
+                        'kommentar']
 
     # Write data created to project database.
     populate_table(df=entry, dbname=dbname, dbtable='project_entry',
@@ -1289,7 +1335,8 @@ def main():
                                db_host=DB_HOST,
                                db_port=db_port,
                                correct_entry=CORRECT_PROJECT_ENTRY,
-                               filepath_corr=FILEPATH_PROJECT_ENTRY_CORR
+                               filepath_corr1=FILEPATH_PROJECT_ENTRY_CORR1,
+                               filepath_corr2=FILEPATH_PROJECT_ENTRY_CORR2
                                )
             logging.info('Project data are processed.')
         elif db_exist:
