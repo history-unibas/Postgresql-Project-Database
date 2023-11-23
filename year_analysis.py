@@ -58,7 +58,9 @@ def main():
         read_table(dbname=DB_NAME, dbtable='project_entry',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
-        columns=['entryId', 'pageId', 'year', 'yearSource', 'comment'])
+        columns=['entryId', 'pageId',
+                 'year', 'yearSource',
+                 'comment', 'manuallyCorrected'])
     dossier = pd.DataFrame(
         read_table(dbname=DB_NAME, dbtable='project_dossier',
                    user=db_user, password=db_password,
@@ -154,11 +156,10 @@ def main():
 
         # Search for entries with no ascending year.
         if year_previous and year_next:
-            if year_previous < year_next and year_current > year_next:
+            if year_previous <= year_next and year_current > year_next:
                 entry_analysis.at[index, 'note'] = 'Year number is larger '\
                     'than year from next entry.'
-
-            elif year_previous < year_next and year_current < year_previous:
+            elif year_previous <= year_next and year_current < year_previous:
                 entry_analysis.at[index, 'note'] = 'Year number is smaller '\
                     'than year from previous entry.'
         elif year_next:
