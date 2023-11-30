@@ -155,7 +155,8 @@ def create_schema(dbname, user, password, host, port=5432):
         pageId INTEGER[] NOT NULL,
         year SMALLINT,
         yearSource VARCHAR(40) REFERENCES Transkribus_TextRegion(textRegionId),
-        comment VARCHAR(100))
+        comment VARCHAR(100),
+        manuallyCorrected BOOLEAN NOT NULL DEFAULT false)
     """
                    )
 

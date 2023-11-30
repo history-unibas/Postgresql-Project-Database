@@ -87,6 +87,7 @@ This entity is currently being further developed.
 | year | SMALLINT | no |  | First year detected in header text regions of latest transcript version or manually identified year |
 | yearSource | VARCHAR(40) | no | FOREIGN KEY | Identifier of text region (textRegionId) of the detected year number (if year is automatically identified)|
 | comment | VARCHAR(100) | no |  | Manually added note |
+| manuallyCorrected | BOOLEAN | yes |  | Indication if the the date or the grouping with other pages is manually corrected. |
 
 ### Transkribus_Collection
 Elements of the Transkribus_Collection entity represent a street and are stored as collection on Transkribus.

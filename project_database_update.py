@@ -87,8 +87,8 @@ CORRECT_LINE_ORDER = True
 CORRECT_PROJECT_ENTRY = True
 
 # Filepath of correction files for project_entry.
-FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202310160753.csv'
-FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202311210925.csv'
+FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202311291022.csv'
+FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202311291023.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
@@ -773,6 +773,8 @@ def processing_project(dbname, db_password, db_user='postgres',
     will get the value "undatiert".
     - If the column "kommentar" contains another value than considered above,
     the value will be mapped to the column "comment".
+    The column project_entry.manuallyCorrected is set to True, if the date or
+    the grouping of the pages is corrected by one of the correction files.
 
     Args:
         dbname (str): Name of the project database.
@@ -835,7 +837,10 @@ def processing_project(dbname, db_password, db_user='postgres',
         entry_correction2 = pd.read_csv(filepath_corr2)
 
     # Generate entries of table project_entry.
-    entry = pd.DataFrame(columns=['pageId', 'year', 'yearSource', 'comment'])
+    entry = pd.DataFrame(columns=['pageId',
+                                  'year', 'yearSource',
+                                  'comment',
+                                  'manuallyCorrected'])
     page_prev_has_credit = None
     page_prev_docid = None
     page_prev_status = None
@@ -870,7 +875,8 @@ def processing_project(dbname, db_password, db_user='postgres',
                        'skipped: Folgeseite'))):
             # The content of the current page is considered as same entry
             # than on the previous page.
-            entry.iloc[-1]['pageId'] += [row[1]['pageId']]
+            entry.at[entry.index[-1], 'pageId'] += [row[1]['pageId']]
+            entry.at[entry.index[-1], 'manuallyCorrected'] = True
         elif (page_prev_has_credit is False
               and page_prev_docid == row[1]['docId']
               and page_prev_status != 'DONE'
@@ -878,14 +884,14 @@ def processing_project(dbname, db_password, db_user='postgres',
               and not any(tr['type'].isin(['header']))):
             # The content of the current page is considered as same entry
             # than on the previous page.
-            entry.iloc[-1]['pageId'] += [row[1]['pageId']]
+            entry.at[entry.index[-1], 'pageId'] += [row[1]['pageId']]
         else:
             # The content of the current page is considered as new entry.
             entry = pd.concat(
                 [entry,
-                 pd.DataFrame([[[row[1]['pageId']], None, None, None]],
+                 pd.DataFrame([[[row[1]['pageId']], None, None, None, False]],
                               columns=['pageId', 'year', 'yearSource',
-                                       'comment'])
+                                       'comment', 'manuallyCorrected'])
                  ], ignore_index=True)
 
         # Set parameters for the next iteration.
@@ -912,8 +918,9 @@ def processing_project(dbname, db_password, db_user='postgres',
                     entry['pageId'].apply(lambda x: row[1]['pageid'] in x)]
             if not math.isnan(row[1]['datum_neu']):
                 # Update year and yearSource.
-                entry.loc[entry_match.index, ['year', 'yearSource']] = [
-                    row[1]['datum_neu'], None]
+                entry.loc[entry_match.index,
+                          ['year', 'yearSource', 'manuallyCorrected']
+                          ] = [row[1]['datum_neu'], None, True]
             if isinstance(row[1]['kommentar'], str):
                 # Copy the comment.
                 entry.loc[entry_match.index, 'comment'] = row[1]['kommentar']
@@ -925,14 +932,17 @@ def processing_project(dbname, db_password, db_user='postgres',
                 continue
             if not math.isnan(row[1]['datum_neu']):
                 # Update year and yearSource.
-                entry.loc[entry_match.index, ['year', 'yearSource']] = [
-                    row[1]['datum_neu'], None]
+                entry.loc[entry_match.index,
+                          ['year', 'yearSource', 'manuallyCorrected']
+                          ] = [row[1]['datum_neu'], None, True]
             if isinstance(row[1]['kommentar'], str):
                 if row[1]['kommentar'] == 'skipped: undatiert ':
                     # Remove date and add comment.
-                    entry.loc[entry_match.index, ['year', 'yearSource']] = [
-                        None, None]
-                    entry.loc[entry_match.index, 'comment'] = 'undatiert'
+                    entry.loc[entry_match.index,
+                              ['year', 'yearSource',
+                               'comment',
+                               'manuallyCorrected']] = [
+                                   None, None, 'undatiert', True]
                 elif row[1]['kommentar'] == 'skipped: Folgeseite':
                     # Ignore the comment in this case.
                     pass
@@ -1358,9 +1368,10 @@ def main():
             cursor.execute(f"""
             INSERT INTO project_entry
             SELECT * FROM dblink('{dblink_connname}',
-            'SELECT entryid,pageid,year,yearsource,comment FROM project_entry')
+            'SELECT entryid,pageid,year,yearsource,comment,manuallycorrected
+            FROM project_entry')
             AS t(entryid uuid, pageid integer[], year integer, yearsource text,
-            comment text)
+            comment text, manuallycorrected boolean)
             """)
             conn.close()
             logging.info('Project data are copied from current database.')
