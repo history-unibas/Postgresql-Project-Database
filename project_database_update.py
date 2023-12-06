@@ -87,8 +87,8 @@ CORRECT_LINE_ORDER = True
 CORRECT_PROJECT_ENTRY = True
 
 # Filepath of correction files for project_entry.
-FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202311291022.csv'
-FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202311291023.csv'
+FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202312041016.csv'
+FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202312041016.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
