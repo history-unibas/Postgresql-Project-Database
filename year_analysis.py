@@ -16,16 +16,14 @@ table is exported as a file year_analysis_entry.csv.
 Step 2
 The attribute year in the table project_dossier is extracted from the
 descriptive note given in the metadata of the HGB. More information can be
-found in the module module project_database_update.py in the function
+found in the module project_database_update.py in the function
 get_validity_range().
 
 This module analyses:
-- If the year from and year to differs between the source descriptive note
-(metadata HGB) and the minimum / maximum value determined in project_entry
-within the same Transkribus document.
+- The minimal and maximal year number per dossier.
+- The first and the last year number within a dossier.
 
-An entry is made in the note column for the affected entries. The generated
-table is exported as a file year_analysis_dossier.csv.
+The generated table is exported as a file year_analysis_dossier.csv.
 """
 
 
@@ -176,9 +174,10 @@ def main():
                           index=False, header=True)
 
     # Analyze the time period for each HGB dossier.
-    dossier['yearFrom_entry'] = None
-    dossier['yearTo_entry'] = None
-    dossier['note'] = None
+    dossier['yearFrom_entryMin'] = None
+    dossier['yearTo_entryMax'] = None
+    dossier['yearFrom_entryFirst'] = None
+    dossier['yearTo_entryLast'] = None
     for index, row in dossier.iterrows():
         dossier_id = document[
             document['title'] == row['dossierId']]['docId']
@@ -187,30 +186,30 @@ def main():
         else:
             continue
 
-        # Determine yearFrom and yearTo based on the values from project_entry.
+        # Determine yearFrom and yearTo based on the minimal and maximal
+        # value from project_entry.
         dossier_entry = entry_analysis[entry_analysis['docId'] == dossier_id]
         if dossier_entry.empty:
             continue
         if not math.isnan(dossier_entry['year'].min()):
-            yearfrom_entry = int(dossier_entry['year'].min())
+            dossier.at[index,
+                       'yearFrom_entryMin'
+                       ] = int(dossier_entry['year'].min())
         if not math.isnan(dossier_entry['year'].max()):
-            yearto_entry = int(dossier_entry['year'].max())
-        dossier.at[index, 'yearFrom_entry'] = yearfrom_entry
-        dossier.at[index, 'yearTo_entry'] = yearto_entry
+            dossier.at[index,
+                       'yearTo_entryMax'
+                       ] = int(dossier_entry['year'].max())
 
-        # Get contradictions between the sources metadata from stabs and
+        # Determine yearFrom and yearTo based on the first and last value from
         # project_entry.
-        if (not math.isnan(dossier.at[index, 'yearFrom_stabs'])
-                and not math.isnan(dossier.at[index, 'yearFrom_entry'])
-                and dossier.at[index, 'yearFrom_stabs'] != yearfrom_entry):
-            dossier.at[index, 'note'] = 'YearFrom differs.'
-        if (not math.isnan(dossier.at[index, 'yearTo_stabs'])
-                and not math.isnan(dossier.at[index, 'yearTo_entry'])
-                and dossier.at[index, 'yearTo_stabs'] != yearto_entry):
-            if dossier.at[index, 'note']:
-                dossier.at[index, 'note'] += ' YearTo differs.'
-            else:
-                dossier.at[index, 'note'] = 'YearTo differs.'
+        if not math.isnan(dossier_entry['year'].iloc[0]):
+            dossier.at[index,
+                       'yearFrom_entryFirst'
+                       ] = int(dossier_entry['year'].iloc[0])
+        if not math.isnan(dossier_entry['year'].iloc[-1]):
+            dossier.at[index,
+                       'yearTo_entryLast'
+                       ] = int(dossier_entry['year'].iloc[-1])
 
     # Export the results.
     dossier.to_csv(FILEPATH_ANALYSIS + '/year_analysis_dossier.csv',
