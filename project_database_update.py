@@ -66,7 +66,6 @@ LOGFILE_DIR = './project_database_update.log'
 DB_NAME = 'hgb'
 DB_USER = 'postgres'
 DB_HOST = 'localhost'
-DB_HOST = '130.92.252.51'
 
 # Set filepaths for HGB metadata.
 FILEPATH_SERIE = './data/stabs_serie.csv'
@@ -1427,58 +1426,58 @@ def main():
         else:
             logging.warning('No project data will be available in database.')
 
-    # # Create view.
-    # create_view(dbname=dbname_temp,
-    #             user=DB_USER, password=db_password,
-    #             host=DB_HOST, port=db_port
-    #             )
+    # Create view.
+    create_view(dbname=dbname_temp,
+                user=DB_USER, password=db_password,
+                host=DB_HOST, port=db_port
+                )
 
-    # # Delete existing database.
-    # if db_exist:
-    #     try:
-    #         delete_database(dbname=DB_NAME,
-    #                         user=DB_USER, password=db_password,
-    #                         host=DB_HOST, port=db_port
-    #                         )
-    #         logging.info(f'Old database {DB_NAME} was deleted.')
-    #     except Exception as err:
-    #         logging.error(f'The database {DB_NAME} can\'t be deleted. {err=}, '
-    #                       f'{type(err)=}')
-    #         raise
+    # Delete existing database.
+    if db_exist:
+        try:
+            delete_database(dbname=DB_NAME,
+                            user=DB_USER, password=db_password,
+                            host=DB_HOST, port=db_port
+                            )
+            logging.info(f'Old database {DB_NAME} was deleted.')
+        except Exception as err:
+            logging.error(f'The database {DB_NAME} can\'t be deleted. {err=}, '
+                          f'{type(err)=}')
+            raise
 
-    # # Copy the new created database.
-    # copy_database(dbname_source=dbname_temp, dbname_destination=DB_NAME,
-    #               user=DB_USER, password=db_password,
-    #               host=DB_HOST, port=db_port
-    #               )
-    # logging.info(f'New database {dbname_temp} copied to {DB_NAME}.')
+    # Copy the new created database.
+    copy_database(dbname_source=dbname_temp, dbname_destination=DB_NAME,
+                  user=DB_USER, password=db_password,
+                  host=DB_HOST, port=db_port
+                  )
+    logging.info(f'New database {dbname_temp} copied to {DB_NAME}.')
 
-    # # Rename the database.
-    # dbname_copy = DB_NAME + '_' + \
-    #     str(datetime_started.date()).replace('-', '_')
-    # rename_database(dbname_old=dbname_temp, dbname_new=dbname_copy,
-    #                 user=DB_USER, password=db_password,
-    #                 host=DB_HOST, port=db_port)
-    # logging.info(f'Database {dbname_temp} was renamed to {dbname_copy}.')
+    # Rename the database.
+    dbname_copy = DB_NAME + '_' + \
+        str(datetime_started.date()).replace('-', '_')
+    rename_database(dbname_old=dbname_temp, dbname_new=dbname_copy,
+                    user=DB_USER, password=db_password,
+                    host=DB_HOST, port=db_port)
+    logging.info(f'Database {dbname_temp} was renamed to {dbname_copy}.')
 
-    # # Remove privileges for the read_only user for database with date postfix.
-    # remove_privileges(dbname=dbname_copy, user_revoke='read_only',
-    #                   user_admin=DB_USER, password_admin=db_password,
-    #                   host=DB_HOST, port=db_port)
+    # Remove privileges for the read_only user for database with date postfix.
+    remove_privileges(dbname=dbname_copy, user_revoke='read_only',
+                      user_admin=DB_USER, password_admin=db_password,
+                      host=DB_HOST, port=db_port)
 
-    # # Create backup of database.
-    # command = f'pg_dump -d {dbname_copy} -F p ' + \
-    #     f'-f {BACKUP_DIR}/dump_{dbname_copy}.sql'
-    # result = os.system(command)
-    # if result == 0:
-    #     logging.info(f'Backup of {dbname_copy} was created.')
-    # else:
-    #     logging.error(f'Backup of {dbname_copy} failed: {result}.')
+    # Create backup of database.
+    command = f'pg_dump -d {dbname_copy} -F p ' + \
+        f'-f {BACKUP_DIR}/dump_{dbname_copy}.sql'
+    result = os.system(command)
+    if result == 0:
+        logging.info(f'Backup of {dbname_copy} was created.')
+    else:
+        logging.error(f'Backup of {dbname_copy} failed: {result}.')
 
-    # datetime_ended = datetime.now()
-    # datetime_duration = datetime_ended - datetime_started
-    # logging.info(f'Duration of the run: {str(datetime_duration)}.')
-    # logging.info('Script finished.')
+    datetime_ended = datetime.now()
+    datetime_duration = datetime_ended - datetime_started
+    logging.info(f'Duration of the run: {str(datetime_duration)}.')
+    logging.info('Script finished.')
 
 
 if __name__ == "__main__":
