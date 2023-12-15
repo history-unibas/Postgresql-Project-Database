@@ -56,7 +56,7 @@ def main():
         read_table(dbname=DB_NAME, dbtable='project_entry',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
-        columns=['entryId', 'pageId',
+        columns=['entryId', 'dossierId', 'pageId',
                  'year', 'yearSource',
                  'comment', 'manuallyCorrected'])
     dossier = pd.DataFrame(
@@ -64,7 +64,8 @@ def main():
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
         columns=['dossierId', 'yearFrom_stabs', 'yearTo_stabs',
-                 'yearFrom2', 'yearTo2'])
+                 'yearFrom2', 'yearTo2', 'location'])
+    dossier = dossier.drop('location', axis=1)
     document = pd.DataFrame(
         read_table(dbname=DB_NAME, dbtable='transkribus_document',
                    user=db_user, password=db_password,

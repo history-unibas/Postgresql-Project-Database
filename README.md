@@ -16,7 +16,7 @@ This repository contains Python scripts to administrate the the project database
 ## Database Schema 
 The following figure shows all entities defined in the project database and their links to each other. Reading example for the link between StABS_Series and StABS_Dossier: An entry of the entity StABS_Series is connected to one or more entries of the entity StABS_Dossier. Conversely, an entry of the StABS_Dossier entity is related to exactly one entry of the StABS_Series entity.
 
-![entityRelations](entityRelations.svg)
+![entityRelations](entityRelations.drawio.svg)
 
 The tables StABS_Series and StABS_Dossier containing metadata from the Historical Land Registry (HGB) available as linked open data by the State Archives of Basel.
 
@@ -63,7 +63,7 @@ This entity contains metadata from the State Archives on the "Regesten Klingenta
 | expressedDate | VARCHAR(50) | yes |  | Expressed date of the document |
 
 ### Project_Dossier
-Elements of the Project_Dossier table represent a dossier of HGB analogous to the elements in the entity StABS_Dossier. Currently, Project_Dossier contains attributes that are derived from attributes of StABS_Dossier.
+Elements of the Project_Dossier table represent a dossier of HGB analogous to the elements in the entity StABS_Dossier. Only dossiers relevant to our project are mapped in this entity. This means dossiers that are referenced in the Project_Dossier entity.
 
 This entity is currently being further developed.
 
@@ -74,15 +74,15 @@ This entity is currently being further developed.
 | yearTo1 | SMALLINT | no |  | Year until when dossier is valid based on StABS_Dossier.descriptiveNote (first time interval)|
 | yearFrom2 | SMALLINT | no |  | Year from of second time interval when dossier is valid |
 | yearTo2 | SMALLINT | no |  | Year until of second time interval when dossier is valid |
+| location | geometry(Point, 2056) | no |  | Geographical localisation of the dossier |
 
 ### Project_Entry
-Elements of the Project_Entry table represent an entry recorded in the HGB. Several entries can be documented on one register card of the HGB or one entry can extend over several pages/register cards. A page in the HGB is represented by an element in the table Transkribus_Page.
-
-This entity is currently being further developed.
+Elements of the Project_Entry table represent an entry recorded in the HGB. Several entries can be documented on one register card of the HGB or one entry can extend over several pages/register cards. A page in the HGB is represented by an element in the table Transkribus_Page. If there are several entries on a register card, these entries are not currently represented by several elements in this table.
 
 | **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
 |---------------|---------------|---------------|---------------|---------------|
 | entryId | UUID | yes | PRIMARY KEY | Identifier project entry |
+| dossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to the linked project dossier, correspond to StABS_Dossier.dossierId  |
 | pageId | INTEGER[] | yes |  | List of associated Transkribus page id's |
 | year | SMALLINT | no |  | First year detected in header text regions of latest transcript version or manually identified year |
 | yearSource | VARCHAR(40) | no | FOREIGN KEY | Identifier of text region (textRegionId) of the detected year number (if year is automatically identified)|
@@ -105,7 +105,7 @@ Elements of the Transkribus_Document entity represent a building or address. On 
 |---------------|---------------|---------------|---------------|---------------|
 | docId | INTEGER | yes | PRIMARY KEY | Identifier Transkribus document (UUID) |
 | colId | INTEGER | yes | FOREIGN KEY | Identifier to the linked collection |
-| title | VARCHAR(15) | yes |  | Title of the Document, correspont to StABS_Dossier.dossierId |
+| title | VARCHAR(15) | yes |  | Title of the Document, correspond to StABS_Dossier.dossierId |
 | nrOfPages | SMALLINT | yes |  | Number of pages linked to the document |
 
 ### Transkribus_Page

@@ -48,13 +48,15 @@ import re
 import os
 import statistics
 import math
+import geopandas
 
 
 from administrateDatabase import (
     delete_database, create_database, create_schema, rename_database,
     copy_database, remove_privileges)
 from connectDatabase import (populate_table, read_table, check_database_exist,
-                             check_table_empty, check_dbtable_exist)
+                             check_table_empty, check_dbtable_exist,
+                             read_geotable, populate_geotable)
 
 
 # Set directory of logfile.
@@ -64,6 +66,7 @@ LOGFILE_DIR = './project_database_update.log'
 DB_NAME = 'hgb'
 DB_USER = 'postgres'
 DB_HOST = 'localhost'
+DB_HOST = '130.92.252.51'
 
 # Set filepaths for HGB metadata.
 FILEPATH_SERIE = './data/stabs_serie.csv'
@@ -624,49 +627,6 @@ def processing_transkribus(series_data, dossiers_data, dbname,
                        )
 
 
-def get_validity_range(remark: str):
-    """Extract from StABS_Dossier.descriptiveNote the validity range of the
-    Dossier.
-
-    In the attribute descriptiveNote of the entity StABS_Dossier, the validity
-    range of a dossier is partially documented. This function extracts the
-    validity range from the note for the most frequent samples.
-
-        Args:
-            remark (str): Note according to the pattern of
-            StABS_Dossier.descriptiveNote.
-
-        Returns:
-            Tuble: First element of the tuble correspond to the year from of
-            the validity range, the second element to the year to of the
-            validity range.
-    """
-    if not remark:
-        return (None, None)
-    else:
-        year_from = None
-        year_to = None
-
-    # Search for year number from.
-    match_from = re.search(r'^((Seit)|(Errichtet)|(Ab)) 1[0-9]{3}\.', remark)
-    if match_from:
-        year_from = match_from.group()[-5:-1]
-
-    # Search for year number to.
-    match_to = re.search(r'((Bis)|(Abgebrochen)) 1[0-9]{3}\.', remark)
-    if match_to:
-        year_to = match_to.group()[-5:-1]
-
-    # Consider patterns like "1734-1819".
-    if not year_from and not year_to:
-        match = re.match(r'^1[0-9]{3}-1[0-9]{3}\.?$', remark)
-        if match:
-            year_from = match.group()[:4]
-            year_to = match.group()[5:9]
-
-    return (year_from, year_to)
-
-
 def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
     """Extract the occurrence of a year in text regions of latest transcript.
 
@@ -729,6 +689,49 @@ def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
     return (None, None)
 
 
+def get_validity_range(remark: str):
+    """Extract from StABS_Dossier.descriptiveNote the validity range of the
+    Dossier.
+
+    In the attribute descriptiveNote of the entity StABS_Dossier, the validity
+    range of a dossier is partially documented. This function extracts the
+    validity range from the note for the most frequent samples.
+
+        Args:
+            remark (str): Note according to the pattern of
+            StABS_Dossier.descriptiveNote.
+
+        Returns:
+            Tuble: First element of the tuble correspond to the year from of
+            the validity range, the second element to the year to of the
+            validity range.
+    """
+    if not remark:
+        return (None, None)
+    else:
+        year_from = None
+        year_to = None
+
+    # Search for year number from.
+    match_from = re.search(r'^((Seit)|(Errichtet)|(Ab)) 1[0-9]{3}\.', remark)
+    if match_from:
+        year_from = match_from.group()[-5:-1]
+
+    # Search for year number to.
+    match_to = re.search(r'((Bis)|(Abgebrochen)) 1[0-9]{3}\.', remark)
+    if match_to:
+        year_to = match_to.group()[-5:-1]
+
+    # Consider patterns like "1734-1819".
+    if not year_from and not year_to:
+        match = re.match(r'^1[0-9]{3}-1[0-9]{3}\.?$', remark)
+        if match:
+            year_from = match.group()[:4]
+            year_to = match.group()[5:9]
+
+    return (year_from, year_to)
+
+
 def processing_project(dbname, db_password, db_user='postgres',
                        db_host='localhost', db_port=5432,
                        correct_entry=False,
@@ -739,16 +742,13 @@ def processing_project(dbname, db_password, db_user='postgres',
     This function processes all tables of the project database with the prefix
     "project_". In particular:
 
-    1. Determine the entries of the database table project_dossier.
-    - Search entries for yearFrom1 and yearTo1 based on descriptiveNote.
-
-    2. Determine the entries of the database table project_entry. Based on the
+    1. Determine the entries of the database table project_entry. Based on the
     most recent transcript, an HGB entry is interpreted to be on multiple
     pages if the index card has no "header" and "marginalia" text region and
     the page before it has no "credit" text region and is in the same document.
     Pages without (non-empty) text regions and pages with status "DONE" are
-    excluded.
-    - Search the year per entry of the the table project_entry.
+    excluded. In particular:
+    - Search the year per entry based on text regions.
 
     If correction CSV files are provided, the correction file 1 can override
     the usual logic based on the pageid:
@@ -776,6 +776,14 @@ def processing_project(dbname, db_password, db_user='postgres',
     The column project_entry.manuallyCorrected is set to True, if the date or
     the grouping of the pages is corrected by one of the correction files.
 
+    2. Determine the entries of the database table project_dossier. Only
+    dossiers are considered that are referenced by elements of the entity
+    project_entry. In particular:
+    - Search entries for yearFrom1 and yearTo1 based on
+    stabs_dossier.descriptiveNote.
+    - Determine the geographical localisation of the dossier if available in
+    the entity geo_address.
+
     Args:
         dbname (str): Name of the project database.
         db_password (str): Password for the database connection.
@@ -798,6 +806,11 @@ def processing_project(dbname, db_password, db_user='postgres',
         columns=['dossierId', 'serieId', 'stabsId', 'title', 'link',
                  'houseName', 'oldHousenumber', 'owner1862', 'descriptiveNote'
                  ])
+    document = pd.DataFrame(
+        read_table(dbname=dbname, dbtable='transkribus_document',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port),
+        columns=['docId', 'colId', 'title', 'nrOfPages'])
     page = pd.DataFrame(
         read_table(dbname=dbname, dbtable='transkribus_page',
                    user=db_user, password=db_password,
@@ -814,22 +827,10 @@ def processing_project(dbname, db_password, db_user='postgres',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
         columns=['textRegionId', 'key', 'index', 'type', 'textLine', 'text'])
-
-    # Determine the data for the entity project_dossier.
-    dossier = stabs_dossier[['dossierId', 'descriptiveNote']].copy()
-    dossier[['yearFrom1', 'yearTo1']] = dossier.apply(
-        lambda row: get_validity_range(row['descriptiveNote']),
-        axis=1,
-        result_type='expand'
-        )
-    dossier = dossier.drop('descriptiveNote', axis=1)
-    dossier[['yearFrom2', 'yearTo2']] = [None, None]
-
-    # Write data created to project database.
-    populate_table(df=dossier, dbname=dbname, dbtable='project_dossier',
-                   user=db_user, password=db_password,
-                   host=db_host, port=db_port
-                   )
+    geo_address = read_geotable(dbname=dbname, dbtable='geo_address',
+                                geom_col='geom',
+                                user=db_user, password=db_password,
+                                host=db_host, port=db_port)
 
     # Read the entries to correct.
     if correct_entry:
@@ -837,7 +838,7 @@ def processing_project(dbname, db_password, db_user='postgres',
         entry_correction2 = pd.read_csv(filepath_corr2)
 
     # Generate entries of table project_entry.
-    entry = pd.DataFrame(columns=['pageId',
+    entry = pd.DataFrame(columns=['dossierId', 'pageId',
                                   'year', 'yearSource',
                                   'comment',
                                   'manuallyCorrected'])
@@ -887,10 +888,16 @@ def processing_project(dbname, db_password, db_user='postgres',
             entry.at[entry.index[-1], 'pageId'] += [row[1]['pageId']]
         else:
             # The content of the current page is considered as new entry.
+            dossierid = document[
+                document['docId'] == row[1]['docId']
+                ]['title'].values[0]
             entry = pd.concat(
                 [entry,
-                 pd.DataFrame([[[row[1]['pageId']], None, None, None, False]],
-                              columns=['pageId', 'year', 'yearSource',
+                 pd.DataFrame([[dossierid, [row[1]['pageId']],
+                                None, None,
+                                None, False]],
+                              columns=['dossierId', 'pageId',
+                                       'year', 'yearSource',
                                        'comment', 'manuallyCorrected'])
                  ], ignore_index=True)
 
@@ -951,7 +958,41 @@ def processing_project(dbname, db_password, db_user='postgres',
                     entry.loc[entry_match.index, 'comment'] = row[1][
                         'kommentar']
 
+    # Reduce the elements to the dossier referenced in project_entry.
+    stabs_dossier_reduced = stabs_dossier[
+        stabs_dossier['dossierId'].isin(entry['dossierId'])
+        ].copy()
+    dossier = stabs_dossier_reduced[['dossierId', 'descriptiveNote']].copy()
+
+    # Determine the validity range based on the descriptive note.
+    dossier[['yearFrom1', 'yearTo1']] = dossier.apply(
+        lambda row: get_validity_range(row['descriptiveNote']),
+        axis=1,
+        result_type='expand'
+        )
+
+    # Adapt the dataframe to the destination database schema.
+    dossier = dossier.drop('descriptiveNote', axis=1)
+    dossier[['yearFrom2', 'yearTo2', 'location']] = [None, None, None]
+    dossier = geopandas.GeoDataFrame(data=dossier, geometry='location',
+                                     crs='EPSG:2056')
+
+    for row in dossier.iterrows():
+        # Copy the location if available in geo_address.
+        stabsid = stabs_dossier[
+            stabs_dossier['dossierId'] == row[1]['dossierId']
+            ]['stabsId'].values[0]
+        location = geo_address[
+            geo_address['signatur'] == stabsid
+            ]['geom'].copy()
+        if not location.empty:
+            dossier.at[row[0], 'location'] = location.values[0]
+
     # Write data created to project database.
+    populate_geotable(df=dossier, dbname=dbname, dbtable='project_dossier',
+                      user=db_user, password=db_password,
+                      host=db_host, port=db_port
+                      )
     populate_table(df=entry, dbname=dbname, dbtable='project_entry',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port
@@ -1015,7 +1056,7 @@ def import_shapefile(dbname, dbtable,
                          f'into database {dbname}, table {dbtable}.'
                          )
         else:
-            logging.error(f'The shapefile {shapefile_path} was not imported'
+            logging.error(f'The shapefile {shapefile_path} was not imported '
                           f'into database {dbname}, table {dbtable}: {result}.'
                           )
 
@@ -1320,6 +1361,14 @@ def main():
     else:
         logging.warning('No transkribus data will be available in database.')
 
+    # Processing geodata. At the moment, the geodata will always be processed.
+    processing_geodata(
+        shapefile_path=SHAPEFILE_PATH, shapefile_epsg=SHAPEFILE_EPSG,
+        dbname=dbname_temp, db_password=db_password, db_user=DB_USER,
+        db_host=DB_HOST, db_port=db_port
+        )
+    logging.info('Geodata are processed.')
+
     # Processing project data.
     project_dossier_empty = check_table_empty(
         dbname=dbname_temp, dbtable='project_dossier',
@@ -1360,84 +1409,76 @@ def main():
             cursor.execute(f"""
             INSERT INTO project_dossier
             SELECT * FROM dblink('{dblink_connname}',
-            'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2
+            'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2,location
             FROM project_dossier')
             AS t(dossierid text, yearfrom1 integer, yearto1 integer,
-            yearfrom2 integer, yearto2 integer)
+            yearfrom2 integer, yearto2 integer, location geometry)
             """)
             cursor.execute(f"""
             INSERT INTO project_entry
             SELECT * FROM dblink('{dblink_connname}',
-            'SELECT entryid,pageid,year,yearsource,comment,manuallycorrected
-            FROM project_entry')
-            AS t(entryid uuid, pageid integer[], year integer, yearsource text,
-            comment text, manuallycorrected boolean)
+            'SELECT entryid,dossierid,pageid,year,yearsource,comment,
+            manuallycorrected FROM project_entry')
+            AS t(entryid uuid, dossierid text, pageid integer[], year integer,
+            yearsource text, comment text, manuallycorrected boolean)
             """)
             conn.close()
             logging.info('Project data are copied from current database.')
         else:
             logging.warning('No project data will be available in database.')
 
-    # Processing geodata. At the moment, the geodata will always be processed.
-    processing_geodata(
-        shapefile_path=SHAPEFILE_PATH, shapefile_epsg=SHAPEFILE_EPSG,
-        dbname=dbname_temp, db_password=db_password, db_user=DB_USER,
-        db_host=DB_HOST, db_port=db_port
-        )
-    logging.info('Geodata are processed.')
+    # # Create view.
+    # create_view(dbname=dbname_temp,
+    #             user=DB_USER, password=db_password,
+    #             host=DB_HOST, port=db_port
+    #             )
 
-    # Create view.
-    create_view(dbname=dbname_temp,
-                user=DB_USER, password=db_password,
-                host=DB_HOST, port=db_port
-                )
+    # # Delete existing database.
+    # if db_exist:
+    #     try:
+    #         delete_database(dbname=DB_NAME,
+    #                         user=DB_USER, password=db_password,
+    #                         host=DB_HOST, port=db_port
+    #                         )
+    #         logging.info(f'Old database {DB_NAME} was deleted.')
+    #     except Exception as err:
+    #         logging.error(f'The database {DB_NAME} can\'t be deleted. {err=}, '
+    #                       f'{type(err)=}')
+    #         raise
 
-    # Delete existing database.
-    if db_exist:
-        try:
-            delete_database(dbname=DB_NAME,
-                            user=DB_USER, password=db_password,
-                            host=DB_HOST, port=db_port
-                            )
-            logging.info(f'Old database {DB_NAME} was deleted.')
-        except Exception as err:
-            logging.error(f'The database {DB_NAME} can\'t be deleted. {err=}, '
-                          f'{type(err)=}')
-            raise
+    # # Copy the new created database.
+    # copy_database(dbname_source=dbname_temp, dbname_destination=DB_NAME,
+    #               user=DB_USER, password=db_password,
+    #               host=DB_HOST, port=db_port
+    #               )
+    # logging.info(f'New database {dbname_temp} copied to {DB_NAME}.')
 
-    # Copy the new created database.
-    copy_database(dbname_source=dbname_temp, dbname_destination=DB_NAME,
-                  user=DB_USER, password=db_password,
-                  host=DB_HOST, port=db_port
-                  )
-    logging.info(f'New database {dbname_temp} copied to {DB_NAME}.')
+    # # Rename the database.
+    # dbname_copy = DB_NAME + '_' + \
+    #     str(datetime_started.date()).replace('-', '_')
+    # rename_database(dbname_old=dbname_temp, dbname_new=dbname_copy,
+    #                 user=DB_USER, password=db_password,
+    #                 host=DB_HOST, port=db_port)
+    # logging.info(f'Database {dbname_temp} was renamed to {dbname_copy}.')
 
-    # Rename the database.
-    dbname_copy = DB_NAME + '_' + \
-        str(datetime_started.date()).replace('-', '_')
-    rename_database(dbname_old=dbname_temp, dbname_new=dbname_copy,
-                    user=DB_USER, password=db_password,
-                    host=DB_HOST, port=db_port)
-    logging.info(f'Database {dbname_temp} was renamed to {dbname_copy}.')
+    # # Remove privileges for the read_only user for database with date postfix.
+    # remove_privileges(dbname=dbname_copy, user_revoke='read_only',
+    #                   user_admin=DB_USER, password_admin=db_password,
+    #                   host=DB_HOST, port=db_port)
 
-    # Remove privileges for the read_only user for database with date postfix.
-    remove_privileges(dbname=dbname_copy, user_revoke='read_only',
-                      user_admin=DB_USER, password_admin=db_password,
-                      host=DB_HOST, port=db_port)
+    # # Create backup of database.
+    # command = f'pg_dump -d {dbname_copy} -F p ' + \
+    #     f'-f {BACKUP_DIR}/dump_{dbname_copy}.sql'
+    # result = os.system(command)
+    # if result == 0:
+    #     logging.info(f'Backup of {dbname_copy} was created.')
+    # else:
+    #     logging.error(f'Backup of {dbname_copy} failed: {result}.')
 
-    # Create backup of database.
-    command = f'pg_dump -d {dbname_copy} -F p ' + \
-        f'-f {BACKUP_DIR}/dump_{dbname_copy}.sql'
-    result = os.system(command)
-    if result == 0:
-        logging.info(f'Backup of {dbname_copy} was created.')
-    else:
-        logging.error(f'Backup of {dbname_copy} failed: {result}.')
-
-    datetime_ended = datetime.now()
-    datetime_duration = datetime_ended - datetime_started
-    logging.info(f'Duration of the run: {str(datetime_duration)}.')
-    logging.info('Script finished.')
+    # datetime_ended = datetime.now()
+    # datetime_duration = datetime_ended - datetime_started
+    # logging.info(f'Duration of the run: {str(datetime_duration)}.')
+    # logging.info('Script finished.')
 
 
 if __name__ == "__main__":

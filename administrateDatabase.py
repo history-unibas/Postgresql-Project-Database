@@ -56,8 +56,18 @@ def create_schema(dbname, user, password, host, port=5432):
     conn.autocommit = True
     cursor = conn.cursor()
 
-    # Load modules for creating UUID's.
+    # Load module for creating UUID's.
     cursor.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+
+    # Load postgis module for spatial data.
+    cursor.execute('CREATE EXTENSION IF NOT EXISTS postgis')
+
+    # Load module to query on other database.
+    cursor.execute('CREATE EXTENSION IF NOT EXISTS dblink')
+
+    # Load modules for full text search.
+    cursor.execute('CREATE EXTENSION IF NOT EXISTS pg_trgm')
+    cursor.execute('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch')
 
     # Create tables for historical land registry Basel metadata.
     cursor.execute("""
@@ -146,12 +156,14 @@ def create_schema(dbname, user, password, host, port=5432):
         yearFrom1 SMALLINT,
         yearTo1 SMALLINT,
         yearFrom2 SMALLINT,
-        yearTo2 SMALLINT)
+        yearTo2 SMALLINT,
+        location geometry(Point, 2056))
     """
                    )
     cursor.execute("""
     CREATE TABLE Project_Entry(
         entryId UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+        dossierId VARCHAR(15) NOT NULL REFERENCES Project_Dossier(dossierId),
         pageId INTEGER[] NOT NULL,
         year SMALLINT,
         yearSource VARCHAR(40) REFERENCES Transkribus_TextRegion(textRegionId),
@@ -159,16 +171,6 @@ def create_schema(dbname, user, password, host, port=5432):
         manuallyCorrected BOOLEAN NOT NULL DEFAULT false)
     """
                    )
-
-    # Load postgis module for spatial data.
-    cursor.execute('CREATE EXTENSION IF NOT EXISTS postgis')
-
-    # Load module to query on other database.
-    cursor.execute('CREATE EXTENSION IF NOT EXISTS dblink')
-
-    # Load modules for full text search.
-    cursor.execute('CREATE EXTENSION IF NOT EXISTS pg_trgm')
-    cursor.execute('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch')
 
     # Create index for transkribus_textregion.text.
     cursor.execute("""
