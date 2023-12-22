@@ -133,19 +133,27 @@ def main():
     entry_analysis.sort_values(by=['docId', 'pageNr'],
                                inplace=True, ignore_index=True
                                )
+    year_previous = None
     for index, row in entry_analysis.iterrows():
-        year_previous = None
         year_next = None
         docid_current = row['docId']
         year_current = row['year']
-        if math.isnan(year_current):
-            continue
 
         # Determine the year of the previous entry within the same document.
         if index > 0:
             docid_previous = entry_analysis.iloc[index - 1]['docId']
             if docid_current == docid_previous:
-                year_previous = entry_analysis.iloc[index - 1]['year']
+                # Update year_previous only if not NaN, else take the last
+                # available.
+                year_candidate = entry_analysis.iloc[index - 1]['year']
+                if not math.isnan(year_candidate):
+                    year_previous = year_candidate
+            else:
+                year_previous = None
+
+        # Skip current iteration when no year available.
+        if math.isnan(year_current):
+            continue
 
         # Determine the year of the next entry within the same document.
         if index + 1 < len(entry_analysis):
@@ -154,21 +162,22 @@ def main():
                 year_next = entry_analysis.iloc[index + 1]['year']
 
         # Search for entries with no ascending year.
-        if year_previous and year_next:
+        if year_previous is not None and year_next is not None:
             if year_previous <= year_next and year_current > year_next:
                 entry_analysis.at[index, 'note'] = 'Year number is larger '\
                     'than year from next entry.'
+                continue
             elif year_previous <= year_next and year_current < year_previous:
                 entry_analysis.at[index, 'note'] = 'Year number is smaller '\
                     'than year from previous entry.'
-        elif year_next:
-            if year_current > year_next:
-                entry_analysis.at[index, 'note'] = 'Year number is larger '\
-                    'than year from next entry.'
-        elif year_previous:
-            if year_current < year_previous:
-                entry_analysis.at[index, 'note'] = 'Year number is smaller '\
-                    'than year from previous entry.'
+                continue
+        if year_next is not None and year_current > year_next:
+            entry_analysis.at[index, 'note'] = 'Year number is larger '\
+                'than year from next entry.'
+            continue
+        if year_previous is not None and year_current < year_previous:
+            entry_analysis.at[index, 'note'] = 'Year number is smaller '\
+                'than year from previous entry.'
 
     # Export the results.
     entry_analysis.to_csv(FILEPATH_ANALYSIS + '/year_analysis_entry.csv',

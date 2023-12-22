@@ -117,7 +117,7 @@ def populate_table(df, dbname, dbtable, user, password, host, port=5432, info=Tr
 
 
 def populate_geotable(df, dbname, dbtable, user, password, host, port=5432,
-                      info=True):
+                      info=True, if_exists='append'):
     """Write a geodataframe to a postgis geodatabase table.
 
     Args:
@@ -150,4 +150,4 @@ def populate_geotable(df, dbname, dbtable, user, password, host, port=5432,
     df.columns = df.columns.str.lower()
 
     # Write dataframe to database table.
-    df.to_postgis(dbtable, con=engine, if_exists='append', index=False)
+    df.to_postgis(dbtable, con=engine, if_exists=if_exists, index=False)
