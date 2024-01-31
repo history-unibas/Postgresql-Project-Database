@@ -7,8 +7,8 @@ especially in the function get_year().
 
 This module analyses:
 - No year was detected, but non-empty text regions exist.
-- The year is smaller than the year on a previous page or larger than the year
-on the next page within the same document.
+- The year could be incorrect due to the order of the years within the
+document.
 
 An entry is made in the note column for the affected entries. The generated
 table is exported as a file year_analysis_entry.csv.
@@ -29,7 +29,6 @@ The generated table is exported as a file year_analysis_dossier.csv.
 
 import pandas as pd
 import math
-import warnings
 
 from connectDatabase import read_table
 
@@ -42,9 +41,6 @@ FILEPATH_ANALYSIS = '.'
 
 
 def main():
-    # Disable FutureWarning.
-    warnings.simplefilter(action='ignore', category=FutureWarning)
-
     # Get parameters of the database.
     db_user = input('PostgreSQL user:')
     db_password = input('PostgreSQL password:')
@@ -88,96 +84,115 @@ def main():
                    host=db_host, port=db_port),
         columns=['textRegionId', 'key', 'index', 'type', 'textLine', 'text'])
 
-    # Analyze availability of year for every entry in project_entry.
+    # Analyze the year numbers per document.
     entry_analysis = pd.DataFrame(
         columns=['docId', 'pageNr', 'pageId',
                  'year', 'yearSource', 'hasTextRegion',
                  'note']
         )
-    for row in entry.iterrows():
-        for page_id in row[1]['pageId']:
-            has_tr = False
-            note = None
+    for doc in document.iterrows():
+        dossier_id = doc[1]['title']
+        doc_entry = entry[entry['dossierId'] == dossier_id].copy()
 
-            # Determine latest transcript of current page.
-            ts = transcript[transcript['pageId'] == page_id]
-            ts_sorted = ts.sort_values(by='timestamp', ascending=False)
-            ts_latest = ts_sorted.iloc[0]
-
-            # Determine if transkripted text is available in the latest
-            # transcript.
-            tr = textregion[textregion['key'] == ts_latest['key']]
-            if len(tr) > 0:
-                has_tr = True
-                # Check if a text region is available but no year is available.
-                if math.isnan(row[1]['year']):
-                    note = 'Has non-empty text region(s) but no year '\
-                           'available.'
-            elif math.isnan(row[1]['year']):
-                note = 'No year available.'
-
-            # Add new entry to analysis table.
-            page_selected = page[page['pageId'] == page_id]
-            new_entry = {'docId': page_selected['docId'],
-                         'pageNr': page_selected['pageNr'],
-                         'pageId': page_id,
-                         'year': row[1]['year'],
-                         'yearSource': row[1]['yearSource'],
-                         'hasTextRegion': has_tr,
-                         'note': note}
-            entry_analysis = pd.concat([entry_analysis,
-                                        pd.DataFrame(new_entry)
-                                        ], ignore_index=True)
-
-    # Analyse year ascending within the same Transkribus document.
-    entry_analysis.sort_values(by=['docId', 'pageNr'],
-                               inplace=True, ignore_index=True
-                               )
-    year_previous = None
-    for index, row in entry_analysis.iterrows():
-        year_next = None
-        docid_current = row['docId']
-        year_current = row['year']
-
-        # Determine the year of the previous entry within the same document.
-        if index > 0:
-            docid_previous = entry_analysis.iloc[index - 1]['docId']
-            if docid_current == docid_previous:
-                # Update year_previous only if not NaN, else take the last
-                # available.
-                year_candidate = entry_analysis.iloc[index - 1]['year']
-                if not math.isnan(year_candidate):
-                    year_previous = year_candidate
-            else:
-                year_previous = None
-
-        # Skip current iteration when no year available.
-        if math.isnan(year_current):
+        if doc_entry.empty:
             continue
 
-        # Determine the year of the next entry within the same document.
-        if index + 1 < len(entry_analysis):
-            docid_next = entry_analysis.iloc[index + 1]['docId']
-            if docid_current == docid_next:
-                year_next = entry_analysis.iloc[index + 1]['year']
+        # Order the entries of this document by the page number.
+        doc_entry['pageNr'] = doc_entry.apply(
+            lambda row: page[
+                page['pageId'] == row['pageId'][0]
+                ]['pageNr'].values[0], axis=1
+                )
+        doc_entry.sort_values(by='pageNr', inplace=True)
 
-        # Search for entries with no ascending year.
-        if year_previous is not None and year_next is not None:
-            if year_previous <= year_next and year_current > year_next:
-                entry_analysis.at[index, 'note'] = 'Year number is larger '\
-                    'than year from next entry.'
-                continue
-            elif year_previous <= year_next and year_current < year_previous:
-                entry_analysis.at[index, 'note'] = 'Year number is smaller '\
-                    'than year from previous entry.'
-                continue
-        if year_next is not None and year_current > year_next:
-            entry_analysis.at[index, 'note'] = 'Year number is larger '\
-                'than year from next entry.'
-            continue
-        if year_previous is not None and year_current < year_previous:
-            entry_analysis.at[index, 'note'] = 'Year number is smaller '\
-                'than year from previous entry.'
+        # Detect potential wrong years by pairwise comparisation.
+        n_entries = len(doc_entry)
+        score_minus = [0] * n_entries
+        score_plus = [0] * n_entries
+        index = 0
+        for row in doc_entry.iterrows():
+            for i in range(n_entries):
+                if i < index and row[1]['year'] < doc_entry.iloc[i]['year']:
+                    score_minus[index] += 1
+                elif i > index and row[1]['year'] > doc_entry.iloc[i]['year']:
+                    score_plus[index] += 1
+            index += 1
+
+        # Remove not relevant scores by pairwise comparisation.
+        score_cum = [x + y for x, y in zip(score_minus, score_plus)]
+        score = score_cum.copy()
+        index = 0
+        for row in doc_entry.iterrows():
+            for i in range(n_entries):
+                if i < index and row[1]['year'] < doc_entry.iloc[i]['year']:
+                    if score_cum[i] < score_cum[index]:
+                        score[i] -= 1
+                    elif score_cum[i] > score_cum[index]:
+                        score[index] -= 1
+            index += 1
+
+        # Detect cases when subsequent entry of wrong detected entry might be
+        # wrong instead.
+        for i in range(1, n_entries):
+            if (score_plus[i - 1] > 0
+                and score_minus[i] > score_minus[i - 1]
+                and score_minus[i] >= score_plus[i - 1]):
+                score[i] = score_minus[i]
+
+        # Iterate over each page per entry.
+        index = 0
+        page_nr_previous = None
+        for row in doc_entry.iterrows():
+            for page_id in row[1]['pageId']:
+                has_tr = False
+                note = None
+
+                # Determine latest transcript of current page.
+                ts = transcript[transcript['pageId'] == page_id]
+                ts_sorted = ts.sort_values(by='timestamp', ascending=False)
+                ts_latest = ts_sorted.iloc[0]
+
+                # Determine if transkripted text is available in the latest
+                # transcript.
+                tr = textregion[textregion['key'] == ts_latest['key']]
+                if len(tr) > 0:
+                    has_tr = True
+                    # Check if a text region is available but no year is
+                    # available.
+                    if math.isnan(row[1]['year']):
+                        note = 'Has non-empty text region(s) but no year '\
+                            'available.'
+                elif math.isnan(row[1]['year']):
+                    note = 'No year available.'
+
+                # Create note if year might be wrong.
+                if score[index] > 0:
+                    note = 'Year may be wrong.'
+
+                # Add new entry to analysis table.
+                page_selected = page[page['pageId'] == page_id]
+                new_entry = {'docId': page_selected['docId'],
+                             'pageNr': page_selected['pageNr'],
+                             'pageId': page_id,
+                             'year': row[1]['year'],
+                             'yearSource': row[1]['yearSource'],
+                             'hasTextRegion': has_tr,
+                             'note': note}
+                entry_analysis = pd.concat([entry_analysis,
+                                            pd.DataFrame(new_entry)
+                                            ], ignore_index=True)
+
+                # Check if the pages are ordered.
+                page_nr = page_selected['pageNr'].values[0]
+                if (page_nr_previous is not None
+                    and page_nr <= page_nr_previous):
+                    print('Analysis may be wrong due to wrong page order: '
+                          f'dossier_id={dossier_id}, '
+                          f'docId={page_selected["docId"].values[0]}, '
+                          f'pageNr={page_nr_previous}, {page_nr}'
+                          )
+                page_nr_previous = page_nr
+            index += 1
 
     # Export the results.
     entry_analysis.to_csv(FILEPATH_ANALYSIS + '/year_analysis_entry.csv',
