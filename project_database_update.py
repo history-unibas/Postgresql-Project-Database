@@ -841,8 +841,9 @@ def processing_project(dbname, db_password, db_user='postgres',
                                   'year', 'yearSource',
                                   'comment',
                                   'manuallyCorrected'])
+    entry['manuallyCorrected'] = entry['manuallyCorrected'].astype(bool)
+    entry_prev_docid = None
     page_prev_has_credit = None
-    page_prev_docid = None
     page_prev_status = None
     for row in page.iterrows():
         # Determine corrections if requested.
@@ -878,7 +879,7 @@ def processing_project(dbname, db_password, db_user='postgres',
             entry.at[entry.index[-1], 'pageId'] += [row[1]['pageId']]
             entry.at[entry.index[-1], 'manuallyCorrected'] = True
         elif (page_prev_has_credit is False
-              and page_prev_docid == row[1]['docId']
+              and entry_prev_docid == row[1]['docId']
               and page_prev_status != 'DONE'
               and not any(tr['type'].isin(['marginalia']))
               and not any(tr['type'].isin(['header']))):
@@ -899,13 +900,13 @@ def processing_project(dbname, db_password, db_user='postgres',
                                        'year', 'yearSource',
                                        'comment', 'manuallyCorrected'])
                  ], ignore_index=True)
+            entry_prev_docid = row[1]['docId']
 
         # Set parameters for the next iteration.
         if not tr.empty:
             page_prev_has_credit = any(tr['type'].isin(['credit']))
         else:
             page_prev_has_credit = None
-        page_prev_docid = row[1]['docId']
         page_prev_status = ts_latest['status']
 
     # Search for occurence in year of the latest page version.
