@@ -846,6 +846,10 @@ def processing_project(dbname, db_password, db_user='postgres',
     page_prev_has_credit = None
     page_prev_status = None
     for row in page.iterrows():
+        dossierid = document[
+                document['docId'] == row[1]['docId']
+                ]['title'].values[0]
+
         # Determine corrections if requested.
         if correct_entry:
             page_corr1 = entry_correction1[
@@ -878,6 +882,15 @@ def processing_project(dbname, db_password, db_user='postgres',
             # than on the previous page.
             entry.at[entry.index[-1], 'pageId'] += [row[1]['pageId']]
             entry.at[entry.index[-1], 'manuallyCorrected'] = True
+            if entry.at[entry.index[-1], 'dossierId'] != dossierid:
+                logging.warning(
+                    f"Page with pageId={row[1]['pageId']}, "
+                    f'dossierId={dossierid} is manually defined as same entry '
+                    'than page with pageId='
+                    f"{entry.at[entry.index[-1], 'pageId'][0]}, "
+                    f"dossierId={entry.at[entry.index[-1], 'dossierId']}. But "
+                    'this pages belong not to same Dossier.'
+                    )
         elif (page_prev_has_credit is False
               and entry_prev_docid == row[1]['docId']
               and page_prev_status != 'DONE'
@@ -888,9 +901,6 @@ def processing_project(dbname, db_password, db_user='postgres',
             entry.at[entry.index[-1], 'pageId'] += [row[1]['pageId']]
         else:
             # The content of the current page is considered as new entry.
-            dossierid = document[
-                document['docId'] == row[1]['docId']
-                ]['title'].values[0]
             entry = pd.concat(
                 [entry,
                  pd.DataFrame([[dossierid, [row[1]['pageId']],
