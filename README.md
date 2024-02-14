@@ -74,6 +74,8 @@ This entity is currently being further developed.
 | yearTo1 | SMALLINT | no |  | Year until when dossier is valid based on StABS_Dossier.descriptiveNote (first time interval)|
 | yearFrom2 | SMALLINT | no |  | Year from of second time interval when dossier is valid |
 | yearTo2 | SMALLINT | no |  | Year until of second time interval when dossier is valid |
+| locationAccuracy | VARCHAR(50) | no |  | Statement on the accuracy of the geographical location of the dossier |
+| locationOrigin | VARCHAR(50) | no |  | Statement on the origin of the geographical location of the dossier |
 | location | geometry(Point, 2056) | no |  | Geographical localisation of the dossier |
 
 ### Project_Entry

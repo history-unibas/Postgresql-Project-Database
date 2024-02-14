@@ -983,7 +983,9 @@ def processing_project(dbname, db_password, db_user='postgres',
 
     # Adapt the dataframe to the destination database schema.
     dossier = dossier.drop('descriptiveNote', axis=1)
-    dossier[['yearFrom2', 'yearTo2', 'location']] = [None, None, None]
+    dossier[['yearFrom2', 'yearTo2',
+             'locationAccuracy', 'locationOrigin', 'location']
+            ] = [None, None, None, None, None]
     dossier = geopandas.GeoDataFrame(data=dossier, geometry='location',
                                      crs='EPSG:2056')
 
@@ -1419,10 +1421,11 @@ def main():
             cursor.execute(f"""
             INSERT INTO project_dossier
             SELECT * FROM dblink('{dblink_connname}',
-            'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2,location
-            FROM project_dossier')
+            'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2,
+            locationaccuracy,locationorigin,location FROM project_dossier')
             AS t(dossierid text, yearfrom1 integer, yearto1 integer,
-            yearfrom2 integer, yearto2 integer, location geometry)
+            yearfrom2 integer, yearto2 integer, locationaccuracy text,
+            locationorigin text, location geometry)
             """)
             cursor.execute(f"""
             INSERT INTO project_entry

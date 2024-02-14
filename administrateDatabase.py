@@ -157,6 +157,8 @@ def create_schema(dbname, user, password, host, port=5432):
         yearTo1 SMALLINT,
         yearFrom2 SMALLINT,
         yearTo2 SMALLINT,
+        locationAccuracy VARCHAR(50),
+        locationOrigin VARCHAR(50),
         location geometry(Point, 2056))
     """
                    )
