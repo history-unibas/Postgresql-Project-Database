@@ -89,8 +89,8 @@ CORRECT_LINE_ORDER = True
 CORRECT_PROJECT_ENTRY = True
 
 # Filepath of correction files for project_entry.
-FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202312041016.csv'
-FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202312041016.csv'
+FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202402161625.csv'
+FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202402161624.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
@@ -770,6 +770,9 @@ def processing_project(dbname, db_password, db_user='postgres',
     - If the column "kommentar" contains the value "skipped: undatiert ", the
     columns year and yearSource will be set to None and the column comment
     will get the value "undatiert".
+    - If the column "kommentar" contains the pattern "skipped: [0-9]{2}. Jh.",
+    the columns year and yearSource will be set to None and the column comment
+    will get the value "[0-9]{2}. Jh.".
     - If the column "kommentar" contains another value than considered above,
     the value will be mapped to the column "comment".
     The column project_entry.manuallyCorrected is set to True, if the date or
@@ -960,6 +963,18 @@ def processing_project(dbname, db_password, db_user='postgres',
                                'comment',
                                'manuallyCorrected']] = [
                                    None, None, 'undatiert', True]
+                elif bool(re.match('skipped: [0-9]{2}. Jh.',
+                                   row[1]['kommentar'])):
+                    # Remove date and add comment.
+                    entry.loc[entry_match.index,
+                              ['year', 'yearSource',
+                               'comment',
+                               'manuallyCorrected']] = [
+                                   None, None,
+                                   re.findall('[0-9]{2}. Jh.',
+                                              row[1]['kommentar']
+                                              )[0],
+                                   True]
                 elif row[1]['kommentar'] == 'skipped: Folgeseite':
                     # Ignore the comment in this case.
                     pass
