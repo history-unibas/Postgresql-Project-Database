@@ -60,8 +60,10 @@ def main():
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
         columns=['dossierId', 'yearFrom_stabs', 'yearTo_stabs',
-                 'yearFrom2', 'yearTo2', 'location'])
-    dossier = dossier.drop('location', axis=1)
+                 'yearFrom2', 'yearTo2',
+                 'locationAccuracy', 'locationOrigin', 'location'])
+    dossier = dossier.drop(['locationAccuracy', 'locationOrigin', 'location'],
+                           axis=1)
     document = pd.DataFrame(
         read_table(dbname=DB_NAME, dbtable='transkribus_document',
                    user=db_user, password=db_password,
