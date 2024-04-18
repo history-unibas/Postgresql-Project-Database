@@ -92,6 +92,9 @@ CORRECT_PROJECT_ENTRY = True
 FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202402161625.csv'
 FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202402161624.csv'
 
+# Filepath of correction file for project_dossier.
+FILEPATH_PROJECT_DOSSIER_GEOM = './data/dossiergeom_202404170956.csv'
+
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
 
@@ -735,7 +738,9 @@ def processing_project(dbname, db_password, db_user='postgres',
                        db_host='localhost', db_port=5432,
                        correct_entry=False,
                        filepath_corr1='',
-                       filepath_corr2=''):
+                       filepath_corr2='',
+                       correct_dossier=False,
+                       filepath_dossiergeom=''):
     """Processes the project data within the project database.
 
     This function processes all tables of the project database with the prefix
@@ -785,6 +790,10 @@ def processing_project(dbname, db_password, db_user='postgres',
     stabs_dossier.descriptiveNote.
     - Determine the geographical localisation of the dossier if available in
     the entity geo_address.
+    - If a correction file is made available, additional dossier locations
+    will be adopted and overwritten.
+    - Dossier locations are harmonized if their distance is less than one
+    meter.
 
     Args:
         dbname (str): Name of the project database.
@@ -792,10 +801,13 @@ def processing_project(dbname, db_password, db_user='postgres',
         db_user (str): User of the database connection.
         db_host (str): Host of the database connection.
         db_port (int,str): Port of the database connection.
-        correct_entry (bool): Defines whether a correction file should
-        be applied.
+        correct_entry (bool): Defines whether a correction file for
+        project_entry should be applied.
         filepath_corr1 (str): Filepath of the first correction file.
         filepath_corr2 (str): Filepath of the second correction file.
+        correct_dossier (bool): Defines whether a correction file for
+        project_dossier should be applied.
+        filepath_dossiergeom (str): Filepath of location correction file.
 
     Returns:
         None.
@@ -1013,7 +1025,62 @@ def processing_project(dbname, db_password, db_user='postgres',
             geo_address['signatur'] == stabsid
             ]['geom'].copy()
         if not location.empty:
+            dossier.at[row[0], 'locationAccuracy'] = 'unbekannt'
+            dossier.at[row[0], 'locationOrigin'] = (
+                'Grundbuch- und Vermessungsamt Basel-Stadt')
             dossier.at[row[0], 'location'] = location.values[0]
+
+    # Correct locations of the dossier.
+    if correct_dossier:
+        dossiergeom_correction = pd.read_csv(filepath_dossiergeom)
+        dossiergeom_correction['location'] = geopandas.GeoSeries.from_wkt(
+            dossiergeom_correction['location'])
+        dossiergeom_correction = geopandas.GeoDataFrame(
+            data=dossiergeom_correction,
+            geometry='location', crs='EPSG:2056')
+
+        for row in dossiergeom_correction.iterrows():
+            dossierid = row[1]['dossierid']
+            if row[1]['kategorie'] == 'nicht lokalisierbar':
+                # Case no localisation exists for dossier.
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'locationAccuracy'] = row[1]['kategorie']
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'location'] = None
+            elif pd.isna(row[1]['kategorie']):
+                # Case location was not checked manually.
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'locationAccuracy'] = 'unbekannt'
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'locationOrigin'] = (
+                        'mithilfe von Skript generiert basierend auf Standorte'
+                        ' von Grundbuch- und Vermessungsamt')
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'location'] = row[1]['location']
+            else:
+                # Case location was checked manually.
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'locationAccuracy'] = row[1]['kategorie']
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'locationOrigin'] = 'manuell geprüft'
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'location'] = row[1]['location']
+
+    # Harmonise locations with a distance of less than one meter.
+    for row in dossier.iterrows():
+        if row[1]['location']:
+            distance = row[1]['location'].distance(dossier['location'])
+            dossier.loc[(
+                distance > 0) & (distance < 1), 'location'
+                ] = row[1]['location']
 
     # Write data created to project database.
     populate_geotable(df=dossier, dbname=dbname, dbtable='project_dossier',
@@ -1415,15 +1482,18 @@ def main():
     # Case when all project tables are empty.
     else:
         if process_project:
-            processing_project(dbname=dbname_temp,
-                               db_password=db_password,
-                               db_user=DB_USER,
-                               db_host=DB_HOST,
-                               db_port=db_port,
-                               correct_entry=CORRECT_PROJECT_ENTRY,
-                               filepath_corr1=FILEPATH_PROJECT_ENTRY_CORR1,
-                               filepath_corr2=FILEPATH_PROJECT_ENTRY_CORR2
-                               )
+            processing_project(
+                dbname=dbname_temp,
+                db_password=db_password,
+                db_user=DB_USER,
+                db_host=DB_HOST,
+                db_port=db_port,
+                correct_entry=CORRECT_PROJECT_ENTRY,
+                filepath_corr1=FILEPATH_PROJECT_ENTRY_CORR1,
+                filepath_corr2=FILEPATH_PROJECT_ENTRY_CORR2,
+                correct_dossier=True,
+                filepath_dossiergeom=FILEPATH_PROJECT_DOSSIER_GEOM
+                )
             logging.info('Project data are processed.')
         elif db_exist:
             # Copy existing project table from database DB_NAME to dbname_temp.
