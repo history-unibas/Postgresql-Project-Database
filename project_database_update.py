@@ -49,6 +49,7 @@ import os
 import statistics
 import math
 import geopandas
+from lingua import Language, LanguageDetectorBuilder
 
 
 from administrateDatabase import (
@@ -641,18 +642,18 @@ def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
     case, the page is assumed to be part of the so called "Zinsverzeichnis".
     - If there is no header text region, None will be returned.
 
-        Args:
-            page_id (list): List of page_id's of pages to be considered.
-            df_transcript (DataFrame): Table of all transcript within the
-            project database.
-            df_textregion (DataFrame): Table of all text regions within the
-            project database.
+    Args:
+        page_id (list): List of page_id's of pages to be considered.
+        df_transcript (DataFrame): Table of all transcript within the project
+        database.
+        df_textregion (DataFrame): Table of all text regions within the
+        project database.
+        year_pattern (str): Pattern of the year to be searched.
 
-        Returns:
-            Tuble: First element of the tuble correspond to the first
-            occurrence of the year, the second element to the id of the text
-            region, from which the year comes. If there is no year, None is
-            returned.
+    Returns:
+        Tuble: First element of the tuble correspond to the first occurrence
+        of the year, the second element to the id of the text region, from
+        which the year comes. If there is no year, None is returned.
     """
     # Iterate over all page_id's.
     for page in page_id:
@@ -689,6 +690,100 @@ def get_year(page_id, df_transcript, df_textregion, year_pattern=r'1[0-9]{3}'):
                                 )
 
     return (None, None)
+
+
+def get_language(page_id, df_transcript, df_textregion, tr_type='paragraph'):
+    """Determine the language of text regions.
+
+    Using the existing data in the project database, this method determines
+    the language of the text regions of the text region type tr_type. The
+    following packages are used for this process:
+    https://github.com/pemistahl/lingua-py.
+
+    The text region is divided into the following language classes, optimized
+    for our project:
+    - german: The text region most likely includes German texts.
+    - latin: The text region most likely includes Latin texts.
+    - mixed: The text region includes mixed texts in German and Latin or the
+    language could not be clearly determined.
+    The goal was to minimize misclassifications in German and Latin.
+
+    Args:
+        page_id (list): List of page_id's of pages to be considered.
+        df_transcript (DataFrame): Table of all transcript within the
+        project database.
+        df_textregion (DataFrame): Table of all text regions within the
+        project database.
+        tr_type (str): Type of text region on which speech recognition should
+        be performed.
+
+    Returns:
+        String of the class to which the text region belongs. If the text
+        region does not contain any text, None is returned.
+    """
+    # Iterate over all page_id's to get all text of textregion of type tr_type.
+    tr_merged = ''
+    for page in page_id:
+        # Determine latest transcript of current page.
+        ts = df_transcript[df_transcript['pageId'] == page]
+        ts_sorted = ts.sort_values(by='timestamp', ascending=False)
+        ts_latest = ts_sorted.iloc[0]
+
+        # Get the textregions of type tr_type and extract their text.
+        tr = df_textregion[df_textregion['key'] == ts_latest['key']]
+        tr_selected = tr[tr['type'] == tr_type]
+        for tr_row in tr_selected.iterrows():
+            tr_merged = tr_merged + " ".join(tr_row[1]['textLine']) + ' '
+
+    # Remove special characters.
+    tr_merged = re.sub(r'[^\w\säöü]', '', tr_merged)
+
+    # Get the confidence for German and Latin.
+    detector = LanguageDetectorBuilder.from_all_languages().build()
+    confidence_german = detector.compute_language_confidence(tr_merged,
+                                                             Language.GERMAN)
+    confidence_latin = detector.compute_language_confidence(tr_merged,
+                                                            Language.LATIN)
+    confidence_diff = confidence_german - confidence_latin
+
+    # Determine the median confidence.
+    languages = [Language.GERMAN, Language.LATIN]
+    detector = LanguageDetectorBuilder.from_languages(*languages).build()
+    tr_vector = tr_merged.split()
+    if not tr_vector:
+        # Handle empty vector.
+        return None
+    confidence_german_vector = []
+    confidence_latin_vector = []
+    for word in tr_vector:
+        if word.isdigit():
+            continue
+        confidence_german_vector.append(
+            detector.compute_language_confidence(word, Language.GERMAN))
+        confidence_latin_vector.append(
+            detector.compute_language_confidence(word, Language.LATIN))
+    confidence_german_median = statistics.median(confidence_german_vector)
+    confidence_latin_median = statistics.median(confidence_latin_vector)
+
+    # Classify the language.
+    if confidence_diff <= -0.99:
+        if confidence_latin_median > 0.5:
+            tr_language = 'latin'
+        elif confidence_german_median > 0.7:
+            tr_language = 'german'
+        else:
+            tr_language = 'mixed'
+    elif confidence_diff < 0:
+        if confidence_latin_median > 0.6:
+            tr_language = 'latin'
+        elif confidence_german_median > 0.7:
+            tr_language = 'german'
+        else:
+            tr_language = 'mixed'
+    else:
+        tr_language = 'german'
+
+    return tr_language
 
 
 def get_validity_range(remark: str):
@@ -753,6 +848,8 @@ def processing_project(dbname, db_password, db_user='postgres',
     Pages without (non-empty) text regions and pages with status "DONE" are
     excluded. In particular:
     - Search the year per entry based on text regions.
+    - Classify the language the entry based on the text regions of type
+    paragraph.
 
     If correction CSV files are provided, the correction file 1 can override
     the usual logic based on the pageid:
@@ -855,7 +952,8 @@ def processing_project(dbname, db_password, db_user='postgres',
     entry = pd.DataFrame(columns=['dossierId', 'pageId',
                                   'year', 'yearSource',
                                   'comment',
-                                  'manuallyCorrected'])
+                                  'manuallyCorrected',
+                                  'language'])
     entry['manuallyCorrected'] = entry['manuallyCorrected'].astype(bool)
     entry_prev_docid = None
     page_prev_has_credit = None
@@ -994,6 +1092,15 @@ def processing_project(dbname, db_password, db_user='postgres',
                     # Copy the comment.
                     entry.loc[entry_match.index, 'comment'] = row[1][
                         'kommentar']
+
+    # Classify the language of the entry in text region paragraph.
+    entry['language'] = entry.apply(
+        lambda row: get_language(page_id=row['pageId'],
+                                 df_transcript=transcript,
+                                 df_textregion=textregion),
+        axis=1,
+        result_type='expand'
+        )
 
     # Reduce the elements to the dossier referenced in project_entry.
     stabs_dossier_reduced = stabs_dossier[
@@ -1516,9 +1623,10 @@ def main():
             INSERT INTO project_entry
             SELECT * FROM dblink('{dblink_connname}',
             'SELECT entryid,dossierid,pageid,year,yearsource,comment,
-            manuallycorrected FROM project_entry')
+            manuallycorrected,language FROM project_entry')
             AS t(entryid uuid, dossierid text, pageid integer[], year integer,
-            yearsource text, comment text, manuallycorrected boolean)
+            yearsource text, comment text, manuallycorrected boolean,
+            language text)
             """)
             conn.close()
             logging.info('Project data are copied from current database.')
