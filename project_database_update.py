@@ -63,7 +63,7 @@ from connectDatabase import (populate_table, read_table, check_database_exist,
 # Set directory of logfile.
 LOGFILE_DIR = './project_database_update.log'
 
-# Set parameters for postgresql database
+# Set parameters for postgresql database.
 DB_NAME = 'hgb'
 DB_USER = 'postgres'
 DB_HOST = 'localhost'
@@ -90,11 +90,17 @@ CORRECT_LINE_ORDER = True
 CORRECT_PROJECT_ENTRY = True
 
 # Filepath of correction files for project_entry.
-FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202402161625.csv'
-FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202402161624.csv'
+FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202405031622.csv'
+FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202405160824.csv'
 
 # Filepath of correction file for project_dossier.
 FILEPATH_PROJECT_DOSSIER_GEOM = './data/dossiergeom_202404170956.csv'
+
+# Filepath for source of project_dossier.clusterId.
+FILEPATH_CLUSTERID = './data/20240502_cluster.csv'
+
+# Filepath for source of project_dossier.addressMatchingType.
+FILEPATH_ADDRESSMATCHINGTYPE = './data/20240420 dossier_type.xlsx'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
@@ -835,7 +841,9 @@ def processing_project(dbname, db_password, db_user='postgres',
                        filepath_corr1='',
                        filepath_corr2='',
                        correct_dossier=False,
-                       filepath_dossiergeom=''):
+                       filepath_dossiergeom='',
+                       filepath_clusterid='',
+                       filepath_addressmatchingtype=''):
     """Processes the project data within the project database.
 
     This function processes all tables of the project database with the prefix
@@ -891,6 +899,15 @@ def processing_project(dbname, db_password, db_user='postgres',
     will be adopted and overwritten.
     - Dossier locations are harmonized if their distance is less than one
     meter.
+    - The cluster ids will be included if provided. This ids are derifed from
+    dossier_relationship.py
+    - The address matching type will be included if provided. This
+    categorisation is based on StABS_Dossier.title. The following values are
+    available:
+        - partOf: Dossier comprises a part of a house number.
+        - joined: Dossier includes more than one house number.
+        - partOfAndJoined: Dossier is partOf and Joined.
+        - unchanged: Dossier is neither part of nor joined.
 
     Args:
         dbname (str): Name of the project database.
@@ -905,6 +922,9 @@ def processing_project(dbname, db_password, db_user='postgres',
         correct_dossier (bool): Defines whether a correction file for
         project_dossier should be applied.
         filepath_dossiergeom (str): Filepath of location correction file.
+        filepath_clusterid (str): Filepath of file containing cluster id.
+        filepath_addressmatchingtype (str): Filepath of file containing the
+        type for address matching.
 
     Returns:
         None.
@@ -1102,6 +1122,8 @@ def processing_project(dbname, db_password, db_user='postgres',
         result_type='expand'
         )
 
+    logging.info('Entity project_entry generated.')
+
     # Reduce the elements to the dossier referenced in project_entry.
     stabs_dossier_reduced = stabs_dossier[
         stabs_dossier['dossierId'].isin(entry['dossierId'])
@@ -1118,8 +1140,9 @@ def processing_project(dbname, db_password, db_user='postgres',
     # Adapt the dataframe to the destination database schema.
     dossier = dossier.drop('descriptiveNote', axis=1)
     dossier[['yearFrom2', 'yearTo2',
-             'locationAccuracy', 'locationOrigin', 'location']
-            ] = [None, None, None, None, None]
+             'locationAccuracy', 'locationOrigin', 'location',
+             'clusterId', 'addressMatchingType']
+            ] = [None, None, None, None, None, None, None]
     dossier = geopandas.GeoDataFrame(data=dossier, geometry='location',
                                      crs='EPSG:2056')
 
@@ -1188,6 +1211,28 @@ def processing_project(dbname, db_password, db_user='postgres',
             dossier.loc[(
                 distance > 0) & (distance < 1), 'location'
                 ] = row[1]['location']
+
+    # Add cluster id if available.
+    if filepath_clusterid:
+        dossier_cluster = pd.read_csv(filepath_clusterid)
+        dossier_cluster = dossier_cluster[
+            dossier_cluster['cluster_id'].notna()]
+        dossier_cluster['cluster_id'] = dossier_cluster[
+            'cluster_id'].astype(int)
+        for row in dossier_cluster.iterrows():
+            dossier.loc[
+                dossier['dossierId'] == row[1]['dossierId'],
+                'clusterId'] = row[1]['cluster_id']
+
+    # Add the type for address matching.
+    if filepath_addressmatchingtype:
+        dossier_type = pd.read_excel(filepath_addressmatchingtype)
+        for row in dossier_type.iterrows():
+            dossier.loc[
+                dossier['dossierId'] == row[1]['dossierId'],
+                'addressMatchingType'] = row[1]['type']
+
+    logging.info('Entity project_dossier generated.')
 
     # Write data created to project database.
     populate_geotable(df=dossier, dbname=dbname, dbtable='project_dossier',
@@ -1599,7 +1644,9 @@ def main():
                 filepath_corr1=FILEPATH_PROJECT_ENTRY_CORR1,
                 filepath_corr2=FILEPATH_PROJECT_ENTRY_CORR2,
                 correct_dossier=True,
-                filepath_dossiergeom=FILEPATH_PROJECT_DOSSIER_GEOM
+                filepath_dossiergeom=FILEPATH_PROJECT_DOSSIER_GEOM,
+                filepath_clusterid=FILEPATH_CLUSTERID,
+                filepath_addressmatchingtype=FILEPATH_ADDRESSMATCHINGTYPE
                 )
             logging.info('Project data are processed.')
         elif db_exist:
@@ -1614,10 +1661,12 @@ def main():
             INSERT INTO project_dossier
             SELECT * FROM dblink('{dblink_connname}',
             'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2,
-            locationaccuracy,locationorigin,location FROM project_dossier')
+            locationaccuracy,locationorigin,location,
+            clusterid,addressmatchingtype FROM project_dossier')
             AS t(dossierid text, yearfrom1 integer, yearto1 integer,
             yearfrom2 integer, yearto2 integer, locationaccuracy text,
-            locationorigin text, location geometry)
+            locationorigin text, location geometry,
+            clusterid integer, addressmatchingtype text)
             """)
             cursor.execute(f"""
             INSERT INTO project_entry

@@ -1,5 +1,6 @@
 """
-This file contains functions to create the project database and administrate it.
+This file contains functions to create the project database and administrate
+it.
 """
 
 
@@ -11,7 +12,8 @@ def delete_database(dbname, user, password, host, port=5432):
     # Delete a database
 
     try:
-        conn = psycopg2.connect(user=user, password=password, host=host, port=port)
+        conn = psycopg2.connect(user=user, password=password,
+                                host=host, port=port)
         conn.autocommit = True
         cursor = conn.cursor()
         # Kill all other connections.
@@ -159,7 +161,9 @@ def create_schema(dbname, user, password, host, port=5432):
         yearTo2 SMALLINT,
         locationAccuracy VARCHAR(50),
         locationOrigin VARCHAR(100),
-        location geometry(Point, 2056))
+        location geometry(Point, 2056),
+        clusterId SMALLINT,
+        addressMatchingType VARCHAR(20))
     """
                    )
     cursor.execute("""
@@ -210,7 +214,9 @@ def rename_database(dbname_old, dbname_new, user, password, host, port=5432):
     conn.close()
 
 
-def copy_database(dbname_source, dbname_destination, user, password, host, port=5432):
+def copy_database(dbname_source, dbname_destination,
+                  user, password,
+                  host, port=5432):
     # Copy a database
 
     conn = psycopg2.connect(user=user, host=host, password=password, port=port)

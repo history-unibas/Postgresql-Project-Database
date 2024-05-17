@@ -76,7 +76,8 @@ This entity is currently being further developed.
 | yearTo2 | SMALLINT | no |  | Year until of second time interval when dossier is valid |
 | locationAccuracy | VARCHAR(50) | no |  | Statement on the accuracy of the geographical location of the dossier |
 | locationOrigin | VARCHAR(100) | no |  | Statement on the origin of the geographical location of the dossier |
-| location | geometry(Point, 2056) | no |  | Geographical localisation of the dossier |
+| clusterId | SMALLINT | no |  | ID of related dossiers, defined by dossier_realtionship.py based on StABS_Dossier.title |
+| addressMatchingType | VARCHAR(20) | no |  | Categorisation of the dossier based on StABS_Dossier.title. |
 
 ### Project_Entry
 Elements of the Project_Entry table represent an entry recorded in the HGB. Several entries can be documented on one register card of the HGB or one entry can extend over several pages/register cards. A page in the HGB is represented by an element in the table Transkribus_Page. If there are several entries on a register card, these entries are not currently represented by several elements in this table.
@@ -156,6 +157,9 @@ This script contains functions creating the project database and its schema and 
 
 ## connectDatabase.py
 Functions to read and write to database tables as well as functions to check if a database exist or a table is empty are defined in this script.
+
+## dossier_realtionship.py
+This script is used to determine relationships between dossiers. On the one hand, relationships between dossiers that follow one another in time. On the other hand, clusters of dossiers that are related to each other by address.
 
 ## project_database_update.py
 This script allows to create and update the project database. The data sources used are metadata of the Historical Land Registry of the City of Basel and data from the Transkribus platform. The script uses functions from the following repositories:
