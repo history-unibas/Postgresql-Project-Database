@@ -99,7 +99,7 @@ Elements of the Transkribus_Collection entity represent a street and are stored 
 | **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
 |---------------|---------------|---------------|---------------|---------------|
 | colId | INTEGER | yes | PRIMARY KEY | Identifier Transkribus collection (UUID) |
-| colName | VARCHAR(10) | yes |  | Name of the collection, correspond to StABS_Serie.serieId |
+| colName | VARCHAR(10) | yes | FOREIGN KEY | Name of the collection, correspond to StABS_Serie.serieId |
 | nrOfDocuments | SMALLINT | yes |  | Number of documents linked to the collection |
 
 ### Transkribus_Document
@@ -109,7 +109,7 @@ Elements of the Transkribus_Document entity represent a building or address. On 
 |---------------|---------------|---------------|---------------|---------------|
 | docId | INTEGER | yes | PRIMARY KEY | Identifier Transkribus document (UUID) |
 | colId | INTEGER | yes | FOREIGN KEY | Identifier to the linked collection |
-| title | VARCHAR(15) | yes |  | Title of the Document, correspond to StABS_Dossier.dossierId |
+| title | VARCHAR(15) | yes |  | Title of the Document, correspond to StABS_Dossier.dossierId. In particular cases there is no entry in StABS_Dossier. |
 | nrOfPages | SMALLINT | yes |  | Number of pages linked to the document |
 
 ### Transkribus_Page
@@ -122,6 +122,7 @@ Documents on Transkribus can contain several pages. Each element of the entity T
 | docId | INTEGER | yes | FOREIGN KEY | Identifier to the linked document |
 | pageNr | SMALLINT | yes |  | Page number in the document |
 | urlImage | VARCHAR(100) | yes |  | URI of the image of the page stored in Transkribus |
+| entryId | UUID | no | FOREIGN KEY | Identifier to Project_Entry.entryId |
 
 ### Transkribus_Transcript
 Transcriptions of a page are saved as page xml on Transkribus. Each time a change is made on Transkribus, a new version is generated. Elements of the entity Transkribus_Transcript represent selected information of a page xml.
@@ -150,7 +151,7 @@ Transcriptions of texts are stored on Transkribus within the page xmls in text r
 | text | VARCHAR(10000) | yes |  | Entire transcribed text of the text region, indexed in the database |
 
 ### Geo_Address
-Elements contained in this entity represent the spatial location of HGB dossiers. Not all dossiers are included. Currently, this entity is generated based on a shapefile including all attributes contained therein. The elements of the Geo_Address table can be linked as follows using geo_address.signature = stabs_dossier.stabsid.
+Elements contained in this entity represent the spatial location of HGB dossiers. Not all dossiers are included. Currently, this entity is generated based on a shapefile including all attributes contained therein. The elements of the Geo_Address table are linked as follows using geo_address.signature = stabs_dossier.stabsid.
 
 ## administrateDatabase.py
 This script contains functions creating the project database and its schema and to administrate it using Python scripts.

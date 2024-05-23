@@ -20,11 +20,11 @@ may not always be correct, a text line ordering algorithmus can be applied set
 the parameter CORRECT_LINE_ORDER to True. For more information on the
 Transkribus platform: https://github.com/history-unibas/Trankribus-API.
 
-4. If desired, project data tables are new created and filled. Otherwise, data
-will be copied from the previous database (if existent).
-
-5. Process the geodata. At the moment, the geodata will always be new created
+4. Process the geodata. At the moment, the geodata will always be new created
 and not copied from the previous database.
+
+5. If desired, project data tables are new created and filled. Otherwise, data
+will be copied from the previous database (if existent).
 
 6. Create view for analyzing the data.
 
@@ -946,7 +946,7 @@ def processing_project(dbname, db_password, db_user='postgres',
         read_table(dbname=dbname, dbtable='transkribus_page',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port),
-        columns=['pageId', 'key', 'docId', 'pageNr', 'urlImage'])
+        columns=['pageId', 'key', 'docId', 'pageNr', 'urlImage', 'entryId'])
     transcript = pd.DataFrame(
         read_table(dbname=dbname, dbtable='transkribus_transcript',
                    user=db_user, password=db_password,
@@ -1337,6 +1337,21 @@ def processing_geodata(shapefile_path, shapefile_epsg,
         db_host=db_host, db_port=db_port
         )
 
+    # Add foreign key for geo_address to stabs_dossier.
+    conn = psycopg2.connect(dbname=dbname,
+                            user=db_user, password=db_password,
+                            host=db_host, port=db_port
+                            )
+    conn.autocommit = True
+    cursor = conn.cursor()
+    cursor.execute("""
+    ALTER TABLE geo_address
+    ADD CONSTRAINT stabs_dossier_stabsid_fkey
+    FOREIGN KEY (signatur) REFERENCES stabs_dossier(stabsid)
+    """
+                   )
+    conn.close()
+
 
 def create_view(dbname, user, password, host, port=5432):
     """Create particular database view.
@@ -1576,9 +1591,11 @@ def main():
             AS t(docid integer, colid integer, title text, nrofpages integer)
             """)
             cursor.execute(f"""
-            INSERT INTO transkribus_page
-            SELECT * FROM dblink('{dblink_connname}',
-            'SELECT pageid,key,docid,pagenr,urlimage FROM transkribus_page')
+            INSERT INTO transkribus_page (pageid, key, docid, pagenr, urlimage)
+            SELECT pageid, key, docid, pagenr, urlimage
+            FROM dblink('{dblink_connname}',
+            'SELECT pageid, key, docid, pagenr, urlimage
+            FROM transkribus_page')
             AS t(pageid integer, key text, docid integer, pagenr integer,
             urlimage text)
             """)
@@ -1682,11 +1699,29 @@ def main():
         else:
             logging.warning('No project data will be available in database.')
 
-    # Create view.
-    create_view(dbname=dbname_temp,
-                user=DB_USER, password=db_password,
-                host=DB_HOST, port=db_port
-                )
+        # Update transkribus_page.entryid.
+        conn = psycopg2.connect(dbname=dbname_temp,
+                                user=DB_USER, password=db_password,
+                                host=DB_HOST, port=db_port
+                                )
+        conn.autocommit = True
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE transkribus_page tp
+        SET entryid = pe.entryid
+        FROM (
+            SELECT entryid, UNNEST(pageid) AS pageid
+            FROM project_entry
+        ) AS pe
+        WHERE tp.pageid = pe.pageid;
+        """)
+        conn.close()
+
+    # # Create view.
+    # create_view(dbname=dbname_temp,
+    #             user=DB_USER, password=db_password,
+    #             host=DB_HOST, port=db_port
+    #             )
 
     # Delete existing database.
     if db_exist:

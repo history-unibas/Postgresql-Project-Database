@@ -107,7 +107,7 @@ def create_schema(dbname, user, password, host, port=5432):
     cursor.execute("""
     CREATE TABLE Transkribus_Collection(
         colId INTEGER PRIMARY KEY,
-        colName VARCHAR(10) NOT NULL,
+        colName VARCHAR(10) NOT NULL REFERENCES StABS_Serie(serieId),
         nrOfDocuments SMALLINT NOT NULL)
     """
                    )
@@ -125,7 +125,8 @@ def create_schema(dbname, user, password, host, port=5432):
         key VARCHAR(30) UNIQUE NOT NULL,
         docId INTEGER NOT NULL REFERENCES Transkribus_Document(docId),
         pageNr SMALLINT NOT NULL,
-        urlImage VARCHAR(100) NOT NULL)
+        urlImage VARCHAR(100) NOT NULL,
+        entryId UUID)
     """
                    )
     cursor.execute("""
@@ -179,6 +180,14 @@ def create_schema(dbname, user, password, host, port=5432):
     """
                    )
 
+    # Add reference to Transkribus_Page.
+    cursor.execute("""
+    ALTER TABLE Transkribus_Page
+    ADD CONSTRAINT project_entry_entryid_fkey
+    FOREIGN KEY (entryId) REFERENCES Project_Entry(entryId)
+    """
+                   )
+
     # Create index for transkribus_textregion.text.
     cursor.execute("""
     CREATE INDEX text_idx
@@ -227,7 +236,10 @@ def copy_database(dbname_source, dbname_destination,
     SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid <>
     pg_backend_pid() AND datname = '{dbname_source}'
     """)
-    cursor.execute(f'CREATE DATABASE {dbname_destination} WITH TEMPLATE {dbname_source} OWNER {user}')
+    cursor.execute(f"""
+    CREATE DATABASE {dbname_destination}
+    WITH TEMPLATE {dbname_source} OWNER {user}
+    """)
     conn.close()
 
 
