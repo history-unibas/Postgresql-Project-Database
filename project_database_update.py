@@ -94,13 +94,13 @@ FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202405031622.csv'
 FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202405160824.csv'
 
 # Filepath of correction file for project_dossier.
-FILEPATH_PROJECT_DOSSIER_GEOM = './data/dossiergeom_202404170956.csv'
+FILEPATH_PROJECT_DOSSIER_GEOM = './data/dossiergeom_202406181114.csv'
 
 # Filepath for source of project_dossier.clusterId.
 FILEPATH_CLUSTERID = './data/20240502_cluster.csv'
 
 # Filepath for source of project_dossier.addressMatchingType.
-FILEPATH_ADDRESSMATCHINGTYPE = './data/20240420 dossier_type.xlsx'
+FILEPATH_ADDRESSMATCHINGTYPE = './data/20240611 dossier_type.xlsx'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
@@ -968,6 +968,9 @@ def processing_project(dbname, db_password, db_user='postgres',
         entry_correction1 = pd.read_csv(filepath_corr1)
         entry_correction2 = pd.read_csv(filepath_corr2)
 
+    # Order the pages by docid and pagenr (might not be ordered in database).
+    page = page.sort_values(by=['docId', 'pageNr'], ascending=[True, True])
+
     # Generate entries of table project_entry.
     entry = pd.DataFrame(columns=['dossierId', 'pageId',
                                   'year', 'yearSource',
@@ -1179,6 +1182,18 @@ def processing_project(dbname, db_password, db_user='postgres',
                 dossier.loc[
                     dossier['dossierId'] == dossierid,
                     'location'] = None
+            elif (pd.isna(row[1]['kategorie'])
+                  and not pd.isna(row[1]['bemerkung'])):
+                # Case location was checked manually but not edited.
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'locationAccuracy'] = 'unbekannt'
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'locationOrigin'] = 'manuell geprüft'
+                dossier.loc[
+                    dossier['dossierId'] == dossierid,
+                    'location'] = row[1]['location']
             elif pd.isna(row[1]['kategorie']):
                 # Case location was not checked manually.
                 dossier.loc[
@@ -1193,13 +1208,13 @@ def processing_project(dbname, db_password, db_user='postgres',
                     dossier['dossierId'] == dossierid,
                     'location'] = row[1]['location']
             else:
-                # Case location was checked manually.
+                # Case location was set manually.
                 dossier.loc[
                     dossier['dossierId'] == dossierid,
                     'locationAccuracy'] = row[1]['kategorie']
                 dossier.loc[
                     dossier['dossierId'] == dossierid,
-                    'locationOrigin'] = 'manuell geprüft'
+                    'locationOrigin'] = 'manuell gesetzt'
                 dossier.loc[
                     dossier['dossierId'] == dossierid,
                     'location'] = row[1]['location']
