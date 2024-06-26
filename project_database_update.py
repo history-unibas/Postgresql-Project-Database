@@ -102,6 +102,9 @@ FILEPATH_CLUSTERID = './data/20240502_cluster.csv'
 # Filepath for source of project_dossier.addressMatchingType.
 FILEPATH_ADDRESSMATCHINGTYPE = './data/20240611 dossier_type.xlsx'
 
+# Filepath for source of project_relationship.
+FILEPATH_PROJECT_RELATIONSHIP = './data/20240612_dossier_relationship.csv'
+
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
 
@@ -843,7 +846,8 @@ def processing_project(dbname, db_password, db_user='postgres',
                        correct_dossier=False,
                        filepath_dossiergeom='',
                        filepath_clusterid='',
-                       filepath_addressmatchingtype=''):
+                       filepath_addressmatchingtype='',
+                       filepath_projectrelationship=''):
     """Processes the project data within the project database.
 
     This function processes all tables of the project database with the prefix
@@ -909,6 +913,9 @@ def processing_project(dbname, db_password, db_user='postgres',
         - partOfAndJoined: Dossier is partOf and Joined.
         - unchanged: Dossier is neither part of nor joined.
 
+    3. Based on a CSV file, the entries for the project_relationship entity
+    are generated (if available).
+
     Args:
         dbname (str): Name of the project database.
         db_password (str): Password for the database connection.
@@ -925,6 +932,8 @@ def processing_project(dbname, db_password, db_user='postgres',
         filepath_clusterid (str): Filepath of file containing cluster id.
         filepath_addressmatchingtype (str): Filepath of file containing the
         type for address matching.
+        filepath_projectrelationship (str): Filepath of the file containing
+        the data for entity project_relationship.
 
     Returns:
         None.
@@ -1258,6 +1267,22 @@ def processing_project(dbname, db_password, db_user='postgres',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port
                    )
+
+    # Generate the entity project_relationship.
+    if filepath_projectrelationship:
+        relationship = pd.read_csv(
+            filepath_projectrelationship,
+            header=0,
+            names=['sourcedossierid', 'targetdossierid']
+            )
+        populate_table(df=relationship, dbname=dbname,
+                       dbtable='project_relationship',
+                       user=db_user, password=db_password,
+                       host=db_host, port=db_port
+                       )
+        logging.info('Entity project_relationship generated.')
+    else:
+        logging.warning('No data for entity project_relationship available.')
 
 
 def import_shapefile(dbname, dbtable,
@@ -1678,7 +1703,8 @@ def main():
                 correct_dossier=True,
                 filepath_dossiergeom=FILEPATH_PROJECT_DOSSIER_GEOM,
                 filepath_clusterid=FILEPATH_CLUSTERID,
-                filepath_addressmatchingtype=FILEPATH_ADDRESSMATCHINGTYPE
+                filepath_addressmatchingtype=FILEPATH_ADDRESSMATCHINGTYPE,
+                filepath_projectrelationship=FILEPATH_PROJECT_RELATIONSHIP
                 )
             logging.info('Project data are processed.')
         elif db_exist:
@@ -1708,6 +1734,12 @@ def main():
             AS t(entryid uuid, dossierid text, pageid integer[], year integer,
             yearsource text, comment text, manuallycorrected boolean,
             language text)
+            """)
+            cursor.execute(f"""
+            INSERT INTO project_relationship
+            SELECT * FROM dblink('{dblink_connname}',
+            'SELECT sourcedossierid,targetdossierid FROM project_relationship')
+            AS t(sourcedossierid text, targetdossierid text)
             """)
             conn.close()
             logging.info('Project data are copied from current database.')

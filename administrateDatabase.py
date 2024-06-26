@@ -179,6 +179,14 @@ def create_schema(dbname, user, password, host, port=5432):
         language VARCHAR(20))
     """
                    )
+    cursor.execute("""
+    CREATE TABLE Project_Relationship(
+        sourceDossierId VARCHAR(15) NOT NULL
+            REFERENCES Project_Dossier(dossierId),
+        targetDossierId VARCHAR(15) NOT NULL
+            REFERENCES Project_Dossier(dossierId))
+    """
+                   )
 
     # Add reference to Transkribus_Page.
     cursor.execute("""

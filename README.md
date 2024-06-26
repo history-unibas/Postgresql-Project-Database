@@ -85,13 +85,21 @@ Elements of the Project_Entry table represent an entry recorded in the HGB. Seve
 | **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
 |---------------|---------------|---------------|---------------|---------------|
 | entryId | UUID | yes | PRIMARY KEY | Identifier project entry |
-| dossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to the linked project dossier, correspond to StABS_Dossier.dossierId  |
+| dossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to the linked project dossier, correspond to StABS_Dossier.dossierId |
 | pageId | INTEGER[] | yes |  | List of associated Transkribus page id's |
 | year | SMALLINT | no |  | First year detected in header text regions of latest transcript version or manually identified year |
 | yearSource | VARCHAR(40) | no | FOREIGN KEY | Identifier of text region (textRegionId) of the detected year number (if year is automatically identified)|
 | comment | VARCHAR(100) | no |  | Manually added note |
 | manuallyCorrected | BOOLEAN | yes |  | Indication if the the date or the grouping with other pages is manually corrected. |
 | language | VARCHAR(20) | no |  | Detected language based on text region type paragraph. |
+
+### Project_Relationship
+This entity maps direct temporal relationships between HGB dossiers (represented as a direct edge list). The relationships were determined on the basis of the cluster information (project_dossier.clusterId) using a rule-based approach and manual editing. Dossier represented by identifier in sourceDossierId has as descendant dossier with identifier in targetDossierId. Conversely, dossier represented by identifier in targetDossierId has dossier with identifier in sourceDossierId as previous dossier. Dossier can have several descendants or preceding dossiers due to a split or merge.
+
+| **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
+|---------------|---------------|---------------|---------------|---------------|
+| sourceDossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to source project dossier. |
+| targetDossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to target project dossier. |
 
 ### Transkribus_Collection
 Elements of the Transkribus_Collection entity represent a street and are stored as collection on Transkribus.
