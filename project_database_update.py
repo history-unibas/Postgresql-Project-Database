@@ -1731,7 +1731,7 @@ def main():
             SELECT * FROM dblink('{dblink_connname}',
             'SELECT entryid,dossierid,pageid,year,yearsource,comment,
             manuallycorrected,language FROM project_entry')
-            AS t(entryid uuid, dossierid text, pageid integer[], year integer,
+            AS t(entryid text, dossierid text, pageid integer[], year integer,
             yearsource text, comment text, manuallycorrected boolean,
             language text)
             """)

@@ -84,7 +84,7 @@ Elements of the Project_Entry table represent an entry recorded in the HGB. Seve
 
 | **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
 |---------------|---------------|---------------|---------------|---------------|
-| entryId | UUID | yes | PRIMARY KEY | Identifier project entry |
+| entryId | VARCHAR(45) | yes | PRIMARY KEY | Identifier of project entry generated with date database creation as postfix |
 | dossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to the linked project dossier, correspond to StABS_Dossier.dossierId |
 | pageId | INTEGER[] | yes |  | List of associated Transkribus page id's |
 | year | SMALLINT | no |  | First year detected in header text regions of latest transcript version or manually identified year |
@@ -130,7 +130,7 @@ Documents on Transkribus can contain several pages. Each element of the entity T
 | docId | INTEGER | yes | FOREIGN KEY | Identifier to the linked document |
 | pageNr | SMALLINT | yes |  | Page number in the document |
 | urlImage | VARCHAR(100) | yes |  | URI of the image of the page stored in Transkribus |
-| entryId | UUID | no | FOREIGN KEY | Identifier to Project_Entry.entryId |
+| entryId | VARCHAR(45) | no | FOREIGN KEY | Identifier to Project_Entry.entryId |
 
 ### Transkribus_Transcript
 Transcriptions of a page are saved as page xml on Transkribus. Each time a change is made on Transkribus, a new version is generated. Elements of the entity Transkribus_Transcript represent selected information of a page xml.

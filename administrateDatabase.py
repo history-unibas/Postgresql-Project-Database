@@ -71,6 +71,30 @@ def create_schema(dbname, user, password, host, port=5432):
     cursor.execute('CREATE EXTENSION IF NOT EXISTS pg_trgm')
     cursor.execute('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch')
 
+    # Create custom function to create uuid with date postfix.
+    cursor.execute("""
+    CREATE OR REPLACE FUNCTION uuid_with_postfix() RETURNS VARCHAR(45) AS $$
+    DECLARE
+        generated_uuid UUID;
+        postfix TEXT;
+        final_uuid TEXT;
+    BEGIN
+        -- Generate a new UUID
+        generated_uuid := uuid_generate_v4();
+
+        -- Define the postfix (current date in yyyymmdd format)
+        postfix := to_char(current_date, 'YYYYMMDD');
+
+        -- Concatenate the UUID and the postfix
+        final_uuid := concat(generated_uuid::TEXT, '_', postfix);
+
+        -- Return the final UUID
+        RETURN final_uuid;
+    END;
+    $$ LANGUAGE plpgsql;
+    """
+                   )
+
     # Create tables for historical land registry Basel metadata.
     cursor.execute("""
     CREATE TABLE StABS_Serie(
@@ -126,7 +150,7 @@ def create_schema(dbname, user, password, host, port=5432):
         docId INTEGER NOT NULL REFERENCES Transkribus_Document(docId),
         pageNr SMALLINT NOT NULL,
         urlImage VARCHAR(100) NOT NULL,
-        entryId UUID)
+        entryId VARCHAR(45))
     """
                    )
     cursor.execute("""
@@ -169,7 +193,7 @@ def create_schema(dbname, user, password, host, port=5432):
                    )
     cursor.execute("""
     CREATE TABLE Project_Entry(
-        entryId UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+        entryId VARCHAR(45) DEFAULT uuid_with_postfix() PRIMARY KEY,
         dossierId VARCHAR(15) NOT NULL REFERENCES Project_Dossier(dossierId),
         pageId INTEGER[] NOT NULL,
         year SMALLINT,
