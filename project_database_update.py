@@ -1458,6 +1458,10 @@ def main():
                         )
     logging.info('Script started.')
 
+    # Define if the script will be tested only.
+    do_test = do_process('Do you want to test only the script?')
+    logging.info(f'The script will be tested: {do_test}.')
+
     # Define which data will be processed.
     process_metadata = do_process('Do you want to (re)process the metadata?')
     logging.info(f'The metadata will be (re)processed: {process_metadata}.')
@@ -1770,47 +1774,57 @@ def main():
     #             host=DB_HOST, port=db_port
     #             )
 
-    # Delete existing database.
-    if db_exist:
-        try:
-            delete_database(dbname=DB_NAME,
-                            user=DB_USER, password=db_password,
-                            host=DB_HOST, port=db_port
-                            )
-            logging.info(f'Old database {DB_NAME} was deleted.')
-        except Exception as err:
-            logging.error(f'The database {DB_NAME} can\'t be deleted. {err=}, '
-                          f'{type(err)=}')
-            raise
+    if do_test:
+        # Rename the database.
+        dbname_test = DB_NAME + '_test'
+        rename_database(dbname_old=dbname_temp, dbname_new=dbname_test,
+                        user=DB_USER, password=db_password,
+                        host=DB_HOST, port=db_port)
+        logging.info(f'Database {dbname_temp} was renamed to {dbname_test}.')
+        logging.info('Test finished.')
 
-    # Copy the new created database.
-    copy_database(dbname_source=dbname_temp, dbname_destination=DB_NAME,
-                  user=DB_USER, password=db_password,
-                  host=DB_HOST, port=db_port
-                  )
-    logging.info(f'New database {dbname_temp} copied to {DB_NAME}.')
-
-    # Rename the database.
-    dbname_copy = DB_NAME + '_' + \
-        str(datetime_started.date()).replace('-', '_')
-    rename_database(dbname_old=dbname_temp, dbname_new=dbname_copy,
-                    user=DB_USER, password=db_password,
-                    host=DB_HOST, port=db_port)
-    logging.info(f'Database {dbname_temp} was renamed to {dbname_copy}.')
-
-    # Remove privileges for the read_only user for database with date postfix.
-    remove_privileges(dbname=dbname_copy, user_revoke='read_only',
-                      user_admin=DB_USER, password_admin=db_password,
-                      host=DB_HOST, port=db_port)
-
-    # Create backup of database.
-    command = f'pg_dump -d {dbname_copy} -F p ' + \
-        f'-f {BACKUP_DIR}/dump_{dbname_copy}.sql'
-    result = os.system(command)
-    if result == 0:
-        logging.info(f'Backup of {dbname_copy} was created.')
     else:
-        logging.error(f'Backup of {dbname_copy} failed: {result}.')
+        # Delete existing database.
+        if db_exist:
+            try:
+                delete_database(dbname=DB_NAME,
+                                user=DB_USER, password=db_password,
+                                host=DB_HOST, port=db_port)
+                logging.info(f'Old database {DB_NAME} was deleted.')
+            except Exception as err:
+                logging.error(f'The database {DB_NAME} can\'t be deleted. '
+                              f'{err=}, {type(err)=}')
+                raise
+
+        # Copy the new created database.
+        copy_database(dbname_source=dbname_temp, dbname_destination=DB_NAME,
+                      user=DB_USER, password=db_password,
+                      host=DB_HOST, port=db_port
+                      )
+        logging.info(f'New database {dbname_temp} copied to {DB_NAME}.')
+
+        # Rename the database.
+        dbname_copy = DB_NAME + '_' + \
+            str(datetime_started.date()).replace('-', '_')
+        rename_database(dbname_old=dbname_temp, dbname_new=dbname_copy,
+                        user=DB_USER, password=db_password,
+                        host=DB_HOST, port=db_port)
+        logging.info(f'Database {dbname_temp} was renamed to {dbname_copy}.')
+
+        # Remove privileges for the read_only user for database with date
+        # postfix.
+        remove_privileges(dbname=dbname_copy, user_revoke='read_only',
+                          user_admin=DB_USER, password_admin=db_password,
+                          host=DB_HOST, port=db_port)
+
+        # Create backup of database.
+        command = f'pg_dump -d {dbname_copy} -F p ' + \
+            f'-f {BACKUP_DIR}/dump_{dbname_copy}.sql'
+        result = os.system(command)
+        if result == 0:
+            logging.info(f'Backup of {dbname_copy} was created.')
+        else:
+            logging.error(f'Backup of {dbname_copy} failed: {result}.')
 
     datetime_ended = datetime.now()
     datetime_duration = datetime_ended - datetime_started
