@@ -170,6 +170,9 @@ Functions to read and write to database tables as well as functions to check if 
 ## dossier_realtionship.py
 This script is used to determine relationships between dossiers. On the one hand, relationships between dossiers that follow one another in time. On the other hand, clusters of dossiers that are related to each other by address.
 
+## dossier_validity_range.py
+This script is used to determine validity ranges of dossiers and to detect possible errors.
+
 ## project_database_update.py
 This script allows to create and update the project database. The data sources used are metadata of the Historical Land Registry of the City of Basel and data from the Transkribus platform. The script uses functions from the following repositories:
 - https://github.com/history-unibas/Metadata-Historical-Land-Registry-Basel
