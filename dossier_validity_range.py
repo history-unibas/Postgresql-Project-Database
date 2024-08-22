@@ -17,9 +17,12 @@ or yeartoSource column.
 3. Step
 Based on relations between dossiers, check the following conditions regarding
 validity periods for each dossier.
-- Dossier has preceding and subsequent dossiers,
 - Dossier overlaps in time with previous or subsequent dossier,
 - The difference to the previous or subsequent dossier is more than 20 years.
+Exception: If the descriptiveNote contains the value "including" and there is
+exactly one previous dossier, the tests with previous dossier are skipped.
+If there is exactly one previous and one subsequent dossier, the programme
+also checks whether the previous and subsequent dossiers are the same dossier.
 Each fulfilled condition is documented in the note_postprocessing column.
 """
 
@@ -185,14 +188,19 @@ def main():
             following_dossier = project_relationship[
                 project_relationship['sourceDossierId'] == row['dossierId']]
 
-            if not previous_dossier.empty and not following_dossier.empty:
-                dossier.at[
-                    index,
-                    'note_postprocessing'
-                    ] += 'Dossier has preceding and subsequent dossier.\n'
+            # Check if current dossier contains "including" in descriptiveNote
+            # and only one previous dossier exist.
+            overlap_expected = False
+            note = row['descriptiveNote']
+            if note:
+                match = re.search(r'[Ee]inschl', note)
+                if match and previous_dossier.shape[0] == 1:
+                    # In this case, a temporal overlap of the dossiers with
+                    # previous dossier is expected.
+                    overlap_expected = True
 
             # Compare dossier with previous dossiers.
-            if not previous_dossier.empty:
+            if not previous_dossier.empty and not overlap_expected:
                 for r in previous_dossier.iterrows():
                     yearto = dossier[
                         dossier['dossierId'] == r[1]['sourceDossierId']
@@ -255,10 +263,31 @@ def main():
                                 f'{dossierid_following} is more than 20 years.'
                                 '\n')
 
+            # Test whether previous dossier is also following dossier.
+            if len(previous_dossier) == 1 and len(following_dossier) == 1:
+                dossierid_previous = previous_dossier[
+                    'sourceDossierId'].values[0]
+                dossierid_following = following_dossier[
+                    'targetDossierId'].values[0]
+                if dossierid_previous == dossierid_following:
+                    dossier.at[
+                        index,
+                        'note_postprocessing'
+                        ] += (
+                            f'The preceding dossier {dossierid_previous} is '
+                            'also the subsequent dossier.\n')
+
+    # Add additional columns for the postpocessing.
+    dossier['yearfrom1_new'] = None
+    dossier['yearto1_new'] = None
+    dossier['yearfrom2_new'] = None
+    dossier['yearto2_new'] = None
+    dossier['remark'] = None
+
     # Export result.
-        dossier.to_csv(
-            FILEPATH_RESULT + current_date + '_' + FILENAME_VALIDITYRANGE,
-            index=False, header=True)
+    dossier.to_csv(
+        FILEPATH_RESULT + current_date + '_' + FILENAME_VALIDITYRANGE,
+        index=False, header=True)
 
 
 if __name__ == "__main__":
