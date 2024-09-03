@@ -19,10 +19,13 @@ Based on relations between dossiers, check the following conditions regarding
 validity periods for each dossier.
 - Dossier overlaps in time with previous or subsequent dossier,
 - The difference to the previous or subsequent dossier is more than 20 years.
-Exception: If the descriptiveNote contains the value "including" and there is
-exactly one previous dossier, the tests with previous dossier are skipped.
-If there is exactly one previous and one subsequent dossier, the programme
+- If there is exactly one previous and one subsequent dossier, the programme
 also checks whether the previous and subsequent dossiers are the same dossier.
+Exception: Some dossiers contain a period of additional addresses/buildings
+("including dossier"). Some dossiers were manually classified as such dossiers.
+In these cases, a temporal overlap of the dossiers is to be expected. If only
+one predecessor dossier exists, no analyses are carried out for this dossier
+with the predecessor dossier.
 Each fulfilled condition is documented in the note_postprocessing column.
 """
 
@@ -40,6 +43,10 @@ DB_NAME = 'hgb'
 
 # Define if the descriptiveNote should be analyzed.
 ANALYZE_DESCRIPTIVENOTE = False
+
+# File name for file containing dossierId of dossier for which no time
+# analysis with previous dossier is to be made.
+FILENAME_INCLUDINGDOSSIER = './data/20240828_dossier_einschliesslich.csv'
 
 # Filepath for saving the results.
 FILEPATH_RESULT = './data/'
@@ -177,6 +184,10 @@ def main():
         else:
             dossier.at[index, 'yeartoSource'] = 'stabs_dossier.descriptiveNote'
 
+    # Read including dossier.
+    including_dossier = pd.read_csv(FILENAME_INCLUDINGDOSSIER)
+    including_dossier = including_dossier['dossierId'].tolist()
+
     # Analysis of the years.
     dossier['note_postprocessing'] = ''
     for index, row in dossier.iterrows():
@@ -188,16 +199,14 @@ def main():
             following_dossier = project_relationship[
                 project_relationship['sourceDossierId'] == row['dossierId']]
 
-            # Check if current dossier contains "including" in descriptiveNote
-            # and only one previous dossier exist.
+            # Check if current dossier is classed as 'including dossier' and
+            # only one previous dossier exist.
             overlap_expected = False
-            note = row['descriptiveNote']
-            if note:
-                match = re.search(r'[Ee]inschl', note)
-                if match and previous_dossier.shape[0] == 1:
-                    # In this case, a temporal overlap of the dossiers with
-                    # previous dossier is expected.
-                    overlap_expected = True
+            if (row['dossierId'] in including_dossier
+                    and previous_dossier.shape[0] == 1):
+                # In this case, a temporal overlap of the dossiers with
+                # previous dossier is expected.
+                overlap_expected = True
 
             # Compare dossier with previous dossiers.
             if not previous_dossier.empty and not overlap_expected:
