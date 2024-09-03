@@ -76,8 +76,11 @@ This entity is currently being further developed.
 | yearTo2 | SMALLINT | no |  | Year until of second time interval when dossier is valid |
 | locationAccuracy | VARCHAR(50) | no |  | Statement on the accuracy of the geographical location of the dossier |
 | locationOrigin | VARCHAR(100) | no |  | Statement on the origin of the geographical location of the dossier |
+| location | geometry(Point, 2056) | no |  | Geographical location of the dossier |
+| locationShifted | geometry(Point, 2056) | no |  | Shifted geographical location of the dossier based on location |
+| locationShiftedOrigin | VARCHAR(30) | no |  | Statement on the type of location shift |
 | clusterId | SMALLINT | no |  | ID of related dossiers, defined by dossier_realtionship.py based on StABS_Dossier.title |
-| addressMatchingType | VARCHAR(20) | no |  | Categorisation of the dossier based on StABS_Dossier.title. |
+| addressMatchingType | VARCHAR(20) | no |  | Categorisation of the dossier based on StABS_Dossier.title |
 
 ### Project_Entry
 Elements of the Project_Entry table represent an entry recorded in the HGB. Several entries can be documented on one register card of the HGB or one entry can extend over several pages/register cards. A page in the HGB is represented by an element in the table Transkribus_Page. If there are several entries on a register card, these entries are not currently represented by several elements in this table.

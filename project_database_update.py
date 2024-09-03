@@ -50,6 +50,7 @@ import statistics
 import math
 import geopandas
 from lingua import Language, LanguageDetectorBuilder
+from shapely import wkt
 
 
 from administrateDatabase import (
@@ -95,6 +96,9 @@ FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202405160824.csv'
 
 # Filepath of correction file for project_dossier.
 FILEPATH_PROJECT_DOSSIER_GEOM = './data/dossiergeom_202406181114.csv'
+
+# Filepath for source of project_dossier.locationShifted.
+FILEPATH_LOCATIONSHIFTED = './data/dossiergeomshifted_202408221501.csv'
 
 # Filepath for source of project_dossier.clusterId.
 FILEPATH_CLUSTERID = './data/20240502_cluster.csv'
@@ -845,6 +849,7 @@ def processing_project(dbname, db_password, db_user='postgres',
                        filepath_corr2='',
                        correct_dossier=False,
                        filepath_dossiergeom='',
+                       filepath_locationshifted='',
                        filepath_clusterid='',
                        filepath_addressmatchingtype='',
                        filepath_projectrelationship=''):
@@ -903,6 +908,9 @@ def processing_project(dbname, db_password, db_user='postgres',
     will be adopted and overwritten.
     - Dossier locations are harmonized if their distance is less than one
     meter.
+    - Manual and automatically shifted locations based on the location are
+    added if provided. In addition, the attribute values of
+    locationShiftedOrigin are defined.
     - The cluster ids will be included if provided. This ids are derifed from
     dossier_relationship.py
     - The address matching type will be included if provided. This
@@ -929,6 +937,7 @@ def processing_project(dbname, db_password, db_user='postgres',
         correct_dossier (bool): Defines whether a correction file for
         project_dossier should be applied.
         filepath_dossiergeom (str): Filepath of location correction file.
+        filepath_locationshifted (str): Filepath of shifted location file.
         filepath_clusterid (str): Filepath of file containing cluster id.
         filepath_addressmatchingtype (str): Filepath of file containing the
         type for address matching.
@@ -1153,8 +1162,9 @@ def processing_project(dbname, db_password, db_user='postgres',
     dossier = dossier.drop('descriptiveNote', axis=1)
     dossier[['yearFrom2', 'yearTo2',
              'locationAccuracy', 'locationOrigin', 'location',
+             'locationShifted', 'locationShiftedOrigin',
              'clusterId', 'addressMatchingType']
-            ] = [None, None, None, None, None, None, None]
+            ] = [None, None, None, None, None, None, None, None, None]
     dossier = geopandas.GeoDataFrame(data=dossier, geometry='location',
                                      crs='EPSG:2056')
 
@@ -1235,6 +1245,37 @@ def processing_project(dbname, db_password, db_user='postgres',
             dossier.loc[(
                 distance > 0) & (distance < 1), 'location'
                 ] = row[1]['location']
+
+    # Add shifted locations if available.
+    if filepath_locationshifted:
+        locationshifted = pd.read_csv(filepath_locationshifted, na_values=None)
+
+        # Not condiser dossier with no location.
+        locationshifted = locationshifted.dropna(subset=['locationshifted'])
+
+        for row in locationshifted.iterrows():
+            dossierid = row[1]['dossierid']
+            dossier_index = dossier.loc[
+                dossier['dossierId'] == dossierid].index.values[0]
+            geometry = dossier.at[dossier_index, 'location']
+
+            # Store shifted geometry in dossier.
+            geometry_shifted = wkt.loads(row[1]['locationshifted'])
+            dossier.at[dossier_index, 'locationShifted'] = geometry_shifted
+
+            # Create attribute values for locationShiftedOrigin.
+            if row[1]['locationeditedmanually'] is True:
+                dossier.at[dossier_index,
+                           'locationShiftedOrigin'
+                           ] = 'manuelle Verschiebung'
+            elif geometry.equals(geometry_shifted):
+                dossier.at[dossier_index,
+                           'locationShiftedOrigin'
+                           ] = 'keine Verschiebung'
+            else:
+                dossier.at[dossier_index,
+                           'locationShiftedOrigin'
+                           ] = 'Verschiebung mit Algorithmus'
 
     # Add cluster id if available.
     if filepath_clusterid:
@@ -1706,6 +1747,7 @@ def main():
                 filepath_corr2=FILEPATH_PROJECT_ENTRY_CORR2,
                 correct_dossier=True,
                 filepath_dossiergeom=FILEPATH_PROJECT_DOSSIER_GEOM,
+                filepath_locationshifted=FILEPATH_LOCATIONSHIFTED,
                 filepath_clusterid=FILEPATH_CLUSTERID,
                 filepath_addressmatchingtype=FILEPATH_ADDRESSMATCHINGTYPE,
                 filepath_projectrelationship=FILEPATH_PROJECT_RELATIONSHIP
@@ -1724,10 +1766,12 @@ def main():
             SELECT * FROM dblink('{dblink_connname}',
             'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2,
             locationaccuracy,locationorigin,location,
+            locationshifted,locationshiftedorigin,
             clusterid,addressmatchingtype FROM project_dossier')
             AS t(dossierid text, yearfrom1 integer, yearto1 integer,
             yearfrom2 integer, yearto2 integer, locationaccuracy text,
             locationorigin text, location geometry,
+            locationshifted geometry, locationshiftedorigin text,
             clusterid integer, addressmatchingtype text)
             """)
             cursor.execute(f"""
