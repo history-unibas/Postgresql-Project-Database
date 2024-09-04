@@ -26,7 +26,8 @@ and not copied from the previous database.
 5. If desired, project data tables are new created and filled. Otherwise, data
 will be copied from the previous database (if existent).
 
-6. Create view for analyzing the data.
+6. Create a work table to analyse data more easily. For performance reasons, a
+table is created instead of a view.
 
 7. Previous database is deleted.
 
@@ -1434,8 +1435,8 @@ def processing_geodata(shapefile_path, shapefile_epsg,
     conn.close()
 
 
-def create_view(dbname, user, password, host, port=5432):
-    """Create particular database view.
+def create_worktable(dbname, user, password, host, port=5432):
+    """Create particular database table.
 
     Args:
         dbname (str): Name of the database.
@@ -1447,14 +1448,14 @@ def create_view(dbname, user, password, host, port=5432):
     Returns:
         None.
     """
-    view_name = 'transcript_date_geom'
-    dbview_exist = check_dbtable_exist(dbname=dbname, dbtable=view_name,
+    table_name = 'transcript_date_geom'
+    dbview_exist = check_dbtable_exist(dbname=dbname, dbtable=table_name,
                                        user=user, password=password,
                                        host=host, port=port
                                        )
     if dbview_exist:
-        logging.warning(f'View {view_name} already exist in database {dbname}.'
-                        f' The view will not be new created.')
+        logging.warning(f'Table {table_name} already exist in database '
+                        f'{dbname}. The table will not be new created.')
     else:
         conn = psycopg2.connect(dbname=dbname,
                                 user=user, password=password,
@@ -1462,29 +1463,43 @@ def create_view(dbname, user, password, host, port=5432):
         conn.autocommit = True
         cursor = conn.cursor()
         cursor.execute(f"""
-        CREATE VIEW {view_name} AS
+        CREATE TABLE {table_name} AS
         SELECT
             td.title AS hgb_dossier,
             tp.pagenr AS seite,
             tp.pageid,
             tt.text AS transkript,
             tt.type AS layout_typ,
-            (SELECT pe.year AS jahr
-                FROM project_entry pe
-                WHERE tp.pageid = ANY (pe.pageid)
-                ) AS jahr,
-            ga.geom,
+            pe.year AS jahr,
+            pe.entryid,
+            pd.locationshifted,
+            CASE
+                WHEN pd.locationshiftedorigin = 'keine Verschiebung'
+                    THEN pd.locationorigin
+                ELSE pd.locationshiftedorigin
+            END AS herkunft_standort,
             tp.urlimage AS bild_link
         FROM transkribus_textregion tt
         JOIN transkribus_transcript tt2 ON tt.key::text = tt2.key::text
         JOIN transkribus_page tp ON tt2.pageid = tp.pageid
         JOIN transkribus_document td ON tp.docid = td.docid
-        JOIN stabs_dossier sd ON td.title::text = sd.dossierid::text
-        LEFT JOIN geo_address ga ON sd.stabsid::text = ga.signatur::text
+        JOIN project_dossier pd ON td.title::text = pd.dossierid::text
+        LEFT JOIN project_entry pe ON tp.pageid = ANY (pe.pageid)
         """
                        )
-        cursor.execute("""GRANT SELECT ON transcript_date_geom TO read_only""")
+        cursor.execute(f"""
+        CREATE INDEX transkript_idx
+        ON {table_name}
+        USING gist (transkript gist_trgm_ops)"""
+                       )
+        cursor.execute(f"""
+        GRANT SELECT
+        ON TABLE {table_name}
+        TO read_only"""
+                       )
         conn.close()
+
+        logging.info(f'Work table {table_name} created.')
 
 
 def main():
@@ -1812,11 +1827,11 @@ def main():
         """)
         conn.close()
 
-    # # Create view.
-    # create_view(dbname=dbname_temp,
-    #             user=DB_USER, password=db_password,
-    #             host=DB_HOST, port=db_port
-    #             )
+    # Create view.
+    create_worktable(dbname=dbname_temp,
+                     user=DB_USER, password=db_password,
+                     host=DB_HOST, port=db_port
+                     )
 
     if do_test:
         # Rename the database.
