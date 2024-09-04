@@ -46,7 +46,7 @@ ANALYZE_DESCRIPTIVENOTE = False
 
 # File name for file containing dossierId of dossier for which no time
 # analysis with previous dossier is to be made.
-FILENAME_INCLUDINGDOSSIER = './data/20240828_dossier_einschliesslich.csv'
+FILENAME_INCLUDINGDOSSIER = './data/20240904_dossier_einschliesslich_TEST.csv'  # TODO: for testing.
 
 # Filepath for saving the results.
 FILEPATH_RESULT = './data/'
@@ -186,7 +186,6 @@ def main():
 
     # Read including dossier.
     including_dossier = pd.read_csv(FILENAME_INCLUDINGDOSSIER)
-    including_dossier = including_dossier['dossierId'].tolist()
 
     # Analysis of the years.
     dossier['note_postprocessing'] = ''
@@ -199,22 +198,28 @@ def main():
             following_dossier = project_relationship[
                 project_relationship['sourceDossierId'] == row['dossierId']]
 
-            # Check if current dossier is classed as 'including dossier' and
-            # only one previous dossier exist.
-            overlap_expected = False
-            if (row['dossierId'] in including_dossier
-                    and previous_dossier.shape[0] == 1):
-                # In this case, a temporal overlap of the dossiers with
-                # previous dossier is expected.
-                overlap_expected = True
-
             # Compare dossier with previous dossiers.
-            if not previous_dossier.empty and not overlap_expected:
+            if not previous_dossier.empty:
                 for r in previous_dossier.iterrows():
                     yearto = dossier[
                         dossier['dossierId'] == r[1]['sourceDossierId']
                         ]['yearto1'].values[0]
                     dossierid_previous = r[1]['sourceDossierId']
+
+                    # Check if the current dossier is an included dossier and
+                    # previous dossier is a including dossier.
+                    condition = (
+                        (including_dossier[
+                         'eingeschlossen'
+                         ] == row['dossierId']
+                         ) & (
+                             including_dossier[
+                                 'einschliesslich'
+                             ] == dossierid_previous
+                             ))
+                    if not including_dossier[condition].empty:
+                        # Case do not year analysis on this relation.
+                        continue
 
                     # Check if yearto of previous dossier is larger than
                     # yearfrom1.
@@ -248,6 +253,21 @@ def main():
                         ]['yearfrom1'].values[0]
                     dossierid_following = r[1]['targetDossierId']
 
+                    # Check if the current dossier is an including dossier and
+                    # following dossier is a included dossier.
+                    condition = (
+                        (including_dossier[
+                         'einschliesslich'
+                         ] == row['dossierId']
+                         ) & (
+                             including_dossier[
+                                 'eingeschlossen'
+                             ] == dossierid_following
+                             ))
+                    if not including_dossier[condition].empty:
+                        # Case do not year analysis on this relation.
+                        continue
+
                     # Check if yearfrom of following dossier is smaller than
                     # yearto1.
                     if yearfrom < row['yearto1']:
@@ -273,18 +293,20 @@ def main():
                                 '\n')
 
             # Test whether previous dossier is also following dossier.
-            if len(previous_dossier) == 1 and len(following_dossier) == 1:
-                dossierid_previous = previous_dossier[
-                    'sourceDossierId'].values[0]
-                dossierid_following = following_dossier[
-                    'targetDossierId'].values[0]
-                if dossierid_previous == dossierid_following:
-                    dossier.at[
-                        index,
-                        'note_postprocessing'
-                        ] += (
-                            f'The preceding dossier {dossierid_previous} is '
-                            'also the subsequent dossier.\n')
+            prevandfollow_dossier = pd.merge(previous_dossier,
+                                             following_dossier,
+                                             left_on='sourceDossierId',
+                                             right_on='targetDossierId'
+                                             )
+            if prevandfollow_dossier.shape[0] > 0:
+                prevandfollow_string = ', '.join(
+                    prevandfollow_dossier['sourceDossierId_x'].astype(str)
+                    )
+                dossier.at[
+                    index,
+                    'note_postprocessing'
+                    ] += ('The following dossier is/are also subsequent '
+                          f'dossier: {prevandfollow_string}.\n')
 
     # Add additional columns for the postpocessing.
     dossier['yearfrom1_new'] = None
