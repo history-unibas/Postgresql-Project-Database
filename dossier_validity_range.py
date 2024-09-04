@@ -19,13 +19,12 @@ Based on relations between dossiers, check the following conditions regarding
 validity periods for each dossier.
 - Dossier overlaps in time with previous or subsequent dossier,
 - The difference to the previous or subsequent dossier is more than 20 years.
-- If there is exactly one previous and one subsequent dossier, the programme
-also checks whether the previous and subsequent dossiers are the same dossier.
+- Previous and subsequent dossiers are the same dossier.
 Exception: Some dossiers contain a period of additional addresses/buildings
-("including dossier"). Some dossiers were manually classified as such dossiers.
-In these cases, a temporal overlap of the dossiers is to be expected. If only
-one predecessor dossier exists, no analyses are carried out for this dossier
-with the predecessor dossier.
+("including dossier") in relation to a following dossier ("included dossier").
+Some relations were manually classified as such dossiers. In these cases, a
+temporal overlap of these dossiers is to be expected. Therefore, these
+relationships are not analysed over time.
 Each fulfilled condition is documented in the note_postprocessing column.
 """
 
@@ -46,7 +45,7 @@ ANALYZE_DESCRIPTIVENOTE = False
 
 # File name for file containing dossierId of dossier for which no time
 # analysis with previous dossier is to be made.
-FILENAME_INCLUDINGDOSSIER = './data/20240904_dossier_einschliesslich_TEST.csv'  # TODO: for testing.
+FILENAME_INCLUDINGDOSSIER = './data/20240904_dossier_einschliesslich_TEST.csv'
 
 # Filepath for saving the results.
 FILEPATH_RESULT = './data/'
