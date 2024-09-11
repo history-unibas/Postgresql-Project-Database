@@ -21,10 +21,10 @@ validity periods for each dossier.
 - The difference to the previous or subsequent dossier is more than 20 years.
 - Previous and subsequent dossiers are the same dossier.
 Exception: Some dossiers contain a period of additional addresses/buildings
-("including dossier") in relation to a following dossier ("included dossier").
-Some relations were manually classified as such dossiers. In these cases, a
-temporal overlap of these dossiers is to be expected. Therefore, these
-relationships are not analysed over time.
+("including dossier") in relation to a following dossier ("included dossier"
+or vice versa). Some relations were manually classified as such dossiers. In
+these cases, a temporal overlap of these dossiers is to be expected.
+Therefore, these relationships are not analysed over time.
 Each fulfilled condition is documented in the note_postprocessing column.
 """
 
@@ -45,7 +45,7 @@ ANALYZE_DESCRIPTIVENOTE = False
 
 # File name for file containing dossierId of dossier for which no time
 # analysis with previous dossier is to be made.
-FILENAME_INCLUDINGDOSSIER = './data/20240904_dossier_einschliesslich_TEST.csv'
+FILENAME_INCLUDINGDOSSIER = './data/20240911_dossier_einschliesslich.csv'
 
 # Filepath for saving the results.
 FILEPATH_RESULT = './data/'
@@ -206,7 +206,7 @@ def main():
                     dossierid_previous = r[1]['sourceDossierId']
 
                     # Check if the current dossier is an included dossier and
-                    # previous dossier is a including dossier.
+                    # previous dossier is a including dossier or vice versa.
                     condition = (
                         (including_dossier[
                          'eingeschlossen'
@@ -215,7 +215,15 @@ def main():
                              including_dossier[
                                  'einschliesslich'
                              ] == dossierid_previous
-                             ))
+                             ) | (
+                                  including_dossier[
+                                      'eingeschlossen'
+                                      ] == dossierid_previous
+                                  ) & (
+                                      including_dossier[
+                                          'einschliesslich'
+                                          ] == row['dossierId']
+                                          ))
                     if not including_dossier[condition].empty:
                         # Case do not year analysis on this relation.
                         continue
@@ -253,7 +261,7 @@ def main():
                     dossierid_following = r[1]['targetDossierId']
 
                     # Check if the current dossier is an including dossier and
-                    # following dossier is a included dossier.
+                    # following dossier is a included dossier or vice versa.
                     condition = (
                         (including_dossier[
                          'einschliesslich'
@@ -262,7 +270,15 @@ def main():
                              including_dossier[
                                  'eingeschlossen'
                              ] == dossierid_following
-                             ))
+                             ) | (
+                                 including_dossier[
+                                     'einschliesslich'
+                                     ] == dossierid_following
+                                     ) & (
+                                         including_dossier[
+                                             'eingeschlossen'
+                                             ] == row['dossierId']
+                                             ))
                     if not including_dossier[condition].empty:
                         # Case do not year analysis on this relation.
                         continue
