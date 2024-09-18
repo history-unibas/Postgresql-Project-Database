@@ -18,7 +18,7 @@ or yeartoSource column.
 Based on relations between dossiers, check the following conditions regarding
 validity periods for each dossier.
 - Dossier overlaps in time with previous or subsequent dossier,
-- The difference to the previous or subsequent dossier is more than 20 years.
+- The difference to the previous or subsequent dossier is more than 40 years.
 - Previous and subsequent dossiers are the same dossier.
 Exception: Some dossiers contain a period of additional addresses/buildings
 ("including dossier") in relation to a following dossier ("included dossier"
@@ -240,8 +240,8 @@ def main():
                                 f"yearfrom1 {int(row['yearfrom1'])}.\n")
 
                     # Check if the difference of yearto of previous dossier
-                    # and yearfrom1 is larger than 20 years.
-                    elif yearto + 20 < row['yearfrom1']:
+                    # and yearfrom1 is larger than 40 years.
+                    elif yearto + 40 < row['yearfrom1']:
                         dossier.at[
                             index,
                             'note_postprocessing'
@@ -249,7 +249,7 @@ def main():
                                 f'The difference between yearto {int(yearto)} '
                                 'of the preceding dossier '
                                 f'{dossierid_previous} and yearfrom1 '
-                                f"{int(row['yearfrom1'])} is more than 20 "
+                                f"{int(row['yearfrom1'])} is more than 40 "
                                 'years.\n')
 
             # Compare dossier with following dossiers.
@@ -295,8 +295,8 @@ def main():
                                 f"than yearto1 {int(row['yearto1'])}.\n")
 
                     # Check if the difference of yearto1 and yearfrom of the
-                    # following dossier is larger than 20 years.
-                    elif row['yearto1'] + 20 < yearfrom:
+                    # following dossier is larger than 40 years.
+                    elif row['yearto1'] + 40 < yearfrom:
                         dossier.at[
                             index,
                             'note_postprocessing'
@@ -304,7 +304,7 @@ def main():
                                 'The difference between yearto1 '
                                 f"{int(row['yearto1'])} and yearfrom "
                                 f'{int(yearfrom)} of the following dossier '
-                                f'{dossierid_following} is more than 20 years.'
+                                f'{dossierid_following} is more than 40 years.'
                                 '\n')
 
             # Test whether previous dossier is also following dossier.
