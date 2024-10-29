@@ -108,7 +108,7 @@ FILEPATH_CLUSTERID = './data/20240502_cluster.csv'
 FILEPATH_ADDRESSMATCHINGTYPE = './data/20240611 dossier_type.xlsx'
 
 # Filepath for source of project_relationship.
-FILEPATH_PROJECT_RELATIONSHIP = './data/20240612_dossier_relationship.csv'
+FILEPATH_PROJECT_RELATIONSHIP = './data/20241029_dossier_relationship.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
@@ -908,10 +908,12 @@ def processing_project(dbname, db_password, db_user='postgres',
     - If a correction file is made available, additional dossier locations
     will be adopted and overwritten.
     - Dossier locations are harmonized if their distance is less than one
-    meter.
+    metre.
     - Manual and automatically shifted locations based on the location are
     added if provided. In addition, the attribute values of
     locationShiftedOrigin are defined.
+    - Dossier shifted locations are harmonized if their distance is less than
+    one metre.
     - The cluster ids will be included if provided. This ids are derifed from
     dossier_relationship.py
     - The address matching type will be included if provided. This
@@ -1277,6 +1279,15 @@ def processing_project(dbname, db_password, db_user='postgres',
                 dossier.at[dossier_index,
                            'locationShiftedOrigin'
                            ] = 'Verschiebung mit Algorithmus'
+
+        # Harmonise locations with a distance of less than one meter.
+        for row in dossier.iterrows():
+            if row[1]['locationShifted']:
+                distance = row[1]['locationShifted'].distance(
+                    dossier['locationShifted'])
+                dossier.loc[(
+                    distance > 0) & (distance < 1), 'locationShifted'
+                    ] = row[1]['locationShifted']
 
     # Add cluster id if available.
     if filepath_clusterid:

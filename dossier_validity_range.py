@@ -37,7 +37,7 @@ from datetime import datetime
 from connectDatabase import read_table, read_geotable
 
 
-# Set parameters for postgresql database
+# Set parameters for postgresql database.
 DB_NAME = 'hgb'
 
 # Define if the descriptiveNote should be analyzed.
