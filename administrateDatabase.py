@@ -190,7 +190,8 @@ def create_schema(dbname, user, password, host, port=5432):
         locationShifted geometry(Point, 2056),
         locationShiftedOrigin VARCHAR(30),
         clusterId SMALLINT,
-        addressMatchingType VARCHAR(20))
+        addressMatchingType VARCHAR(20),
+        specialType VARCHAR(20))
     """
                    )
     cursor.execute("""

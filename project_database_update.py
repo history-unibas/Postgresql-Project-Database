@@ -95,6 +95,9 @@ CORRECT_PROJECT_ENTRY = True
 FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202410301306.csv'
 FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202410301306.csv'
 
+# Filepath for source for project_entry.{source,sourceOrigin}.
+FILEPATH_SOURCE = './data/20241030_entry_source.csv'
+
 # Filepath of correction file for project_dossier.
 FILEPATH_PROJECT_DOSSIER_GEOM = './data/dossiergeom_202406181114.csv'
 
@@ -107,11 +110,11 @@ FILEPATH_CLUSTERID = './data/20240502_cluster.csv'
 # Filepath for source of project_dossier.addressMatchingType.
 FILEPATH_ADDRESSMATCHINGTYPE = './data/20240611 dossier_type.xlsx'
 
+# Filepath for source of project_dossier.specialType.
+FILEPATH_SPECIALTYPE = './data/20241030_dossier_specialtype.xlsx'
+
 # Filepath for source of project_relationship.
 FILEPATH_PROJECT_RELATIONSHIP = './data/20241029_dossier_relationship.csv'
-
-# Filepath for source of the attribute for entry.source.
-FILEPATH_SOURCE = './data/20241030_entry_source.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
@@ -857,7 +860,8 @@ def processing_project(dbname, db_password, db_user='postgres',
                        filepath_clusterid='',
                        filepath_addressmatchingtype='',
                        filepath_projectrelationship='',
-                       filepath_source=''):
+                       filepath_source='',
+                       filepath_specialtype=''):
     """Processes the project data within the project database.
 
     This function processes all tables of the project database with the prefix
@@ -929,6 +933,9 @@ def processing_project(dbname, db_password, db_user='postgres',
         - joined: Dossier includes more than one house number.
         - partOfAndJoined: Dossier is partOf and Joined.
         - unchanged: Dossier is neither part of nor joined.
+    - If available, special dossiers are identified by an entry in
+    project_dossier.specialType. The values are based on a simple search with
+    selected terms in StABS_Dossier.title.
 
     3. Based on a CSV file, the entries for the project_relationship entity
     are generated (if available).
@@ -952,6 +959,10 @@ def processing_project(dbname, db_password, db_user='postgres',
         type for address matching.
         filepath_projectrelationship (str): Filepath of the file containing
         the data for entity project_relationship.
+        filepath_source (str): Filepath of the file containing the data for
+        entry source.
+        filepath_specialtype (str): Filepath of the file containing the data
+        for dossier special types.
 
     Returns:
         None.
@@ -1215,8 +1226,8 @@ def processing_project(dbname, db_password, db_user='postgres',
     dossier[['yearFrom2', 'yearTo2',
              'locationAccuracy', 'locationOrigin', 'location',
              'locationShifted', 'locationShiftedOrigin',
-             'clusterId', 'addressMatchingType']
-            ] = [None, None, None, None, None, None, None, None, None]
+             'clusterId', 'addressMatchingType', 'specialType']
+            ] = [None, None, None, None, None, None, None, None, None, None]
     dossier = geopandas.GeoDataFrame(data=dossier, geometry='location',
                                      crs='EPSG:2056')
 
@@ -1357,6 +1368,14 @@ def processing_project(dbname, db_password, db_user='postgres',
             dossier.loc[
                 dossier['dossierId'] == row[1]['dossierId'],
                 'addressMatchingType'] = row[1]['type']
+
+    # Add information about special dossier.
+    if filepath_specialtype:
+        specialtype = pd.read_excel(filepath_specialtype)
+        for row in specialtype.iterrows():
+            dossier.loc[
+                dossier['dossierId'] == row[1]['dossierId'],
+                'specialType'] = row[1]['type']
 
     logging.info('Entity project_dossier generated.')
 
@@ -1826,7 +1845,8 @@ def main():
                 filepath_clusterid=FILEPATH_CLUSTERID,
                 filepath_addressmatchingtype=FILEPATH_ADDRESSMATCHINGTYPE,
                 filepath_projectrelationship=FILEPATH_PROJECT_RELATIONSHIP,
-                filepath_source=FILEPATH_SOURCE
+                filepath_source=FILEPATH_SOURCE,
+                filepath_specialtype=FILEPATH_SPECIALTYPE
                 )
             logging.info('Project data are processed.')
         elif db_exist:
@@ -1843,12 +1863,12 @@ def main():
             'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2,
             locationaccuracy,locationorigin,location,
             locationshifted,locationshiftedorigin,
-            clusterid,addressmatchingtype FROM project_dossier')
+            clusterid,addressmatchingtype,specialtype FROM project_dossier')
             AS t(dossierid text, yearfrom1 integer, yearto1 integer,
             yearfrom2 integer, yearto2 integer, locationaccuracy text,
             locationorigin text, location geometry,
             locationshifted geometry, locationshiftedorigin text,
-            clusterid integer, addressmatchingtype text)
+            clusterid integer, addressmatchingtype text, specialtype text)
             """)
             cursor.execute(f"""
             INSERT INTO project_entry
