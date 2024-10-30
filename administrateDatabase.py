@@ -202,7 +202,9 @@ def create_schema(dbname, user, password, host, port=5432):
         yearSource VARCHAR(40) REFERENCES Transkribus_TextRegion(textRegionId),
         comment VARCHAR(100),
         manuallyCorrected BOOLEAN NOT NULL DEFAULT false,
-        language VARCHAR(20))
+        language VARCHAR(20),
+        source VARCHAR(100),
+        sourceOrigin VARCHAR(30))
     """
                    )
     cursor.execute("""

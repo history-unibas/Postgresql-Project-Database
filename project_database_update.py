@@ -92,8 +92,8 @@ CORRECT_LINE_ORDER = True
 CORRECT_PROJECT_ENTRY = True
 
 # Filepath of correction files for project_entry.
-FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202405031622.csv'
-FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202405160824.csv'
+FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202410301306.csv'
+FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202410301306.csv'
 
 # Filepath of correction file for project_dossier.
 FILEPATH_PROJECT_DOSSIER_GEOM = './data/dossiergeom_202406181114.csv'
@@ -109,6 +109,9 @@ FILEPATH_ADDRESSMATCHINGTYPE = './data/20240611 dossier_type.xlsx'
 
 # Filepath for source of project_relationship.
 FILEPATH_PROJECT_RELATIONSHIP = './data/20241029_dossier_relationship.csv'
+
+# Filepath for source of the attribute for entry.source.
+FILEPATH_SOURCE = './data/20241030_entry_source.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
@@ -853,7 +856,8 @@ def processing_project(dbname, db_password, db_user='postgres',
                        filepath_locationshifted='',
                        filepath_clusterid='',
                        filepath_addressmatchingtype='',
-                       filepath_projectrelationship=''):
+                       filepath_projectrelationship='',
+                       filepath_source=''):
     """Processes the project data within the project database.
 
     This function processes all tables of the project database with the prefix
@@ -868,6 +872,8 @@ def processing_project(dbname, db_password, db_user='postgres',
     - Search the year per entry based on text regions.
     - Classify the language the entry based on the text regions of type
     paragraph.
+    - Take over the sources of entries if a corresponding data source is made
+    available.
 
     If correction CSV files are provided, the correction file 1 can override
     the usual logic based on the pageid:
@@ -997,7 +1003,8 @@ def processing_project(dbname, db_password, db_user='postgres',
                                   'year', 'yearSource',
                                   'comment',
                                   'manuallyCorrected',
-                                  'language'])
+                                  'language',
+                                  'source', 'sourceOrigin'])
     entry['manuallyCorrected'] = entry['manuallyCorrected'].astype(bool)
     entry_prev_docid = None
     page_prev_has_credit = None
@@ -1145,6 +1152,48 @@ def processing_project(dbname, db_password, db_user='postgres',
         axis=1,
         result_type='expand'
         )
+
+    # Determine the origin of the entry.
+    if filepath_source:
+        entry_source = pd.read_csv(filepath_source)
+        for index, row in entry.iterrows():
+            # Get all sources of this entry.
+            source = entry_source[
+                entry_source['pageId'].isin(row['pageId'])
+                ]
+
+            # Continue if no source is available.
+            if source.shape[0] == 0:
+                continue
+
+            # Ensure that the dossier is equal.
+            elif not all(source['dossierId'] == row['dossierId']):
+                logging.warning(
+                    'dossierId for source is not as expected for entry '
+                    f"{row['entryId']}.")
+                continue
+
+            # Ensure that the source value from all matched pages are equal.
+            elif not len(set(source['source'])) == 1:
+                logging.warning(
+                    'Different source values are available for entry '
+                    f"{row['entryId']}.")
+                continue
+
+            # Ensure that the source origin value from all matched pages are
+            # equal.
+            elif not len(set(source['sourceOrigin'])) == 1:
+                logging.warning(
+                    'Different source origin values are available for entry '
+                    f"{row['entryId']}.")
+                continue
+
+            # Write the value for source and source origin in entry.
+            entry.loc[index,
+                      ['source', 'sourceOrigin']
+                      ] = [source['source'].values[0],
+                           source['sourceOrigin'].values[0]
+                           ]
 
     logging.info('Entity project_entry generated.')
 
@@ -1776,7 +1825,8 @@ def main():
                 filepath_locationshifted=FILEPATH_LOCATIONSHIFTED,
                 filepath_clusterid=FILEPATH_CLUSTERID,
                 filepath_addressmatchingtype=FILEPATH_ADDRESSMATCHINGTYPE,
-                filepath_projectrelationship=FILEPATH_PROJECT_RELATIONSHIP
+                filepath_projectrelationship=FILEPATH_PROJECT_RELATIONSHIP,
+                filepath_source=FILEPATH_SOURCE
                 )
             logging.info('Project data are processed.')
         elif db_exist:
@@ -1804,10 +1854,10 @@ def main():
             INSERT INTO project_entry
             SELECT * FROM dblink('{dblink_connname}',
             'SELECT entryid,dossierid,pageid,year,yearsource,comment,
-            manuallycorrected,language FROM project_entry')
+            manuallycorrected,language,source,sourceorigin FROM project_entry')
             AS t(entryid text, dossierid text, pageid integer[], year integer,
             yearsource text, comment text, manuallycorrected boolean,
-            language text)
+            language text, source text, sourceorigin text)
             """)
             cursor.execute(f"""
             INSERT INTO project_relationship
