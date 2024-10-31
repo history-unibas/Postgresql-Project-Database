@@ -1080,10 +1080,17 @@ def processing_project(dbname, db_password, db_user='postgres',
                 [entry,
                  pd.DataFrame([[dossierid, [row[1]['pageId']],
                                 None, None,
-                                None, False]],
+                                None,
+                                False,
+                                None,
+                                None, None
+                                ]],
                               columns=['dossierId', 'pageId',
                                        'year', 'yearSource',
-                                       'comment', 'manuallyCorrected'])
+                                       'comment',
+                                       'manuallyCorrected',
+                                       'language',
+                                       'source', 'sourceOrigin'])
                  ], ignore_index=True)
             entry_prev_docid = row[1]['docId']
 
@@ -1181,14 +1188,14 @@ def processing_project(dbname, db_password, db_user='postgres',
             elif not all(source['dossierId'] == row['dossierId']):
                 logging.warning(
                     'dossierId for source is not as expected for entry '
-                    f"{row['entryId']}.")
+                    f"{row['dossierId']}, {row['pageId']}.")
                 continue
 
             # Ensure that the source value from all matched pages are equal.
             elif not len(set(source['source'])) == 1:
                 logging.warning(
                     'Different source values are available for entry '
-                    f"{row['entryId']}.")
+                    f"{row['dossierId']}, {row['pageId']}.")
                 continue
 
             # Ensure that the source origin value from all matched pages are
@@ -1196,7 +1203,7 @@ def processing_project(dbname, db_password, db_user='postgres',
             elif not len(set(source['sourceOrigin'])) == 1:
                 logging.warning(
                     'Different source origin values are available for entry '
-                    f"{row['entryId']}.")
+                    f"{row['dossierId']}, {row['pageId']}.")
                 continue
 
             # Write the value for source and source origin in entry.
