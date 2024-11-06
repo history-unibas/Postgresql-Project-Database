@@ -205,7 +205,8 @@ def create_schema(dbname, user, password, host, port=5432):
         manuallyCorrected BOOLEAN NOT NULL DEFAULT false,
         language VARCHAR(20),
         source VARCHAR(100),
-        sourceOrigin VARCHAR(30))
+        sourceOrigin VARCHAR(30),
+        keyLatestTranscript VARCHAR(30)[] NOT NULL)
     """
                    )
     cursor.execute("""

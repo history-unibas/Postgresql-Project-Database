@@ -1015,7 +1015,8 @@ def processing_project(dbname, db_password, db_user='postgres',
                                   'comment',
                                   'manuallyCorrected',
                                   'language',
-                                  'source', 'sourceOrigin'])
+                                  'source', 'sourceOrigin',
+                                  'keyLatestTranscript'])
     entry['manuallyCorrected'] = entry['manuallyCorrected'].astype(bool)
     entry_prev_docid = None
     page_prev_has_credit = None
@@ -1057,6 +1058,8 @@ def processing_project(dbname, db_password, db_user='postgres',
             # than on the previous page.
             entry.at[entry.index[-1], 'pageId'] += [row[1]['pageId']]
             entry.at[entry.index[-1], 'manuallyCorrected'] = True
+            entry.at[entry.index[-1], 'keyLatestTranscript'] += [
+                ts_latest['key']]
             if entry.at[entry.index[-1], 'dossierId'] != dossierid:
                 logging.warning(
                     f"Page with pageId={row[1]['pageId']}, "
@@ -1074,6 +1077,8 @@ def processing_project(dbname, db_password, db_user='postgres',
             # The content of the current page is considered as same entry
             # than on the previous page.
             entry.at[entry.index[-1], 'pageId'] += [row[1]['pageId']]
+            entry.at[entry.index[-1], 'keyLatestTranscript'] += [
+                ts_latest['key']]
         else:
             # The content of the current page is considered as new entry.
             entry = pd.concat(
@@ -1083,14 +1088,16 @@ def processing_project(dbname, db_password, db_user='postgres',
                                 None,
                                 False,
                                 None,
-                                None, None
+                                None, None,
+                                [ts_latest['key']]
                                 ]],
                               columns=['dossierId', 'pageId',
                                        'year', 'yearSource',
                                        'comment',
                                        'manuallyCorrected',
                                        'language',
-                                       'source', 'sourceOrigin'])
+                                       'source', 'sourceOrigin',
+                                       'keyLatestTranscript'])
                  ], ignore_index=True)
             entry_prev_docid = row[1]['docId']
 
@@ -1881,10 +1888,12 @@ def main():
             INSERT INTO project_entry
             SELECT * FROM dblink('{dblink_connname}',
             'SELECT entryid,dossierid,pageid,year,yearsource,comment,
-            manuallycorrected,language,source,sourceorigin FROM project_entry')
+            manuallycorrected,language,source,sourceorigin,
+            keylatesttranscript FROM project_entry')
             AS t(entryid text, dossierid text, pageid integer[], year integer,
             yearsource text, comment text, manuallycorrected boolean,
-            language text, source text, sourceorigin text)
+            language text, source text, sourceorigin text,
+            keylatesttranscript text[])
             """)
             cursor.execute(f"""
             INSERT INTO project_relationship

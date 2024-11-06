@@ -98,6 +98,7 @@ Elements of the Project_Entry table represent an entry recorded in the HGB. Seve
 | language | VARCHAR(20) | no |  | Detected language based on text region type paragraph |
 | source | VARCHAR(100) | no |  | Origin of the entry |
 | sourceOrigin | VARCHAR(30) | no |  | Information on the determination of source |
+| keyLatestTranscript | VARCHAR(30)[] | yes |  | List of keys of the latest associated transcripts (Transkribus_Transcript.key) |
 
 ### Project_Relationship
 This entity maps direct temporal relationships between HGB dossiers (represented as a direct edge list). The relationships were determined on the basis of the cluster information (project_dossier.clusterId) using a rule-based approach and manual editing. Dossier represented by identifier in sourceDossierId has as descendant dossier with identifier in targetDossierId. Conversely, dossier represented by identifier in targetDossierId has dossier with identifier in sourceDossierId as previous dossier. Dossier can have several descendants or preceding dossiers due to a split or merge.
