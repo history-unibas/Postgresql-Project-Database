@@ -92,29 +92,29 @@ CORRECT_LINE_ORDER = True
 CORRECT_PROJECT_ENTRY = True
 
 # Filepath of correction files for project_entry.
-FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202410301306.csv'
+FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202411061127.csv'
 FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202410301306.csv'
 
 # Filepath for source for project_entry.{source,sourceOrigin}.
-FILEPATH_SOURCE = './data/20241030_entry_source.csv'
+FILEPATH_SOURCE = './data/20241106_entry_source.csv'
 
 # Filepath of correction file for project_dossier.
 FILEPATH_PROJECT_DOSSIER_GEOM = './data/dossiergeom_202406181114.csv'
 
 # Filepath for source of project_dossier.locationShifted.
-FILEPATH_LOCATIONSHIFTED = './data/dossiergeomshifted_202408221501.csv'
+FILEPATH_LOCATIONSHIFTED = './data/dossiergeomshifted_20241106.csv'
 
 # Filepath for source of project_dossier.clusterId.
 FILEPATH_CLUSTERID = './data/20240502_cluster.csv'
 
 # Filepath for source of project_dossier.addressMatchingType.
-FILEPATH_ADDRESSMATCHINGTYPE = './data/20240611 dossier_type.xlsx'
+FILEPATH_ADDRESSMATCHINGTYPE = './data/20241101_dossier_type.xlsx'
 
 # Filepath for source of project_dossier.specialType.
 FILEPATH_SPECIALTYPE = './data/20241030_dossier_specialtype.xlsx'
 
 # Filepath for source of project_relationship.
-FILEPATH_PROJECT_RELATIONSHIP = './data/20241029_dossier_relationship.csv'
+FILEPATH_PROJECT_RELATIONSHIP = './data/20241103_dossier_relationship.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
