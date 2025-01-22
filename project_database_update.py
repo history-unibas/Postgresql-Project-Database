@@ -92,8 +92,8 @@ CORRECT_LINE_ORDER = True
 CORRECT_PROJECT_ENTRY = True
 
 # Filepath of correction files for project_entry.
-FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202411061127.csv'
-FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202410301306.csv'
+FILEPATH_PROJECT_ENTRY_CORR1 = './data/datetool_202501170947.csv'
+FILEPATH_PROJECT_ENTRY_CORR2 = './data/chronotool_202501170947.csv'
 
 # Filepath for source for project_entry.{source,sourceOrigin}.
 FILEPATH_SOURCE = './data/20241108_entry_source.csv'
@@ -897,7 +897,7 @@ def processing_project(dbname, db_password, db_user='postgres',
     date.
     - If the column "kommentar" contains the value "skipped: Folgeseite", the
     page will be treated as same entry than on the previous page.
-    - If the column "kommentar" contains the value "skipped: undatiert ", the
+    - If the column "kommentar" contains the value "skipped: undatiert", the
     columns year and yearSource will be set to None and the column comment
     will get the value "undatiert".
     - If the column "kommentar" contains the pattern "skipped: [0-9]{2}. Jh.",
@@ -923,7 +923,7 @@ def processing_project(dbname, db_password, db_user='postgres',
     added if provided. In addition, the attribute values of
     locationShiftedOrigin are defined.
     - Dossier shifted locations are harmonized if their distance is less than
-    one metre.
+    one metre taking into account location within one metre.
     - The cluster ids will be included if provided. This ids are derifed from
     dossier_relationship.py
     - The address matching type will be included if provided. This
@@ -1142,7 +1142,7 @@ def processing_project(dbname, db_password, db_user='postgres',
                           ['year', 'yearSource', 'manuallyCorrected']
                           ] = [row[1]['datum_neu'], None, True]
             if isinstance(row[1]['kommentar'], str):
-                if row[1]['kommentar'] == 'skipped: undatiert ':
+                if row[1]['kommentar'] == 'skipped: undatiert':
                     # Remove date and add comment.
                     entry.loc[entry_match.index,
                               ['year', 'yearSource',
@@ -1354,14 +1354,49 @@ def processing_project(dbname, db_password, db_user='postgres',
                            'locationShiftedOrigin'
                            ] = 'Verschiebung mit Algorithmus'
 
-        # Harmonise locations with a distance of less than one meter.
+        # Harmonise shifted locations with a distance of less than one meter
+        # taking into account location within one metre.
         for row in dossier.iterrows():
             if row[1]['locationShifted']:
-                distance = row[1]['locationShifted'].distance(
-                    dossier['locationShifted'])
-                dossier.loc[(
-                    distance > 0) & (distance < 1), 'locationShifted'
-                    ] = row[1]['locationShifted']
+                # Search for dossier with location within one meter.
+                distance_location = row[1]['locationShifted'].distance(
+                    dossier['location'])
+                min_value_location = distance_location.min()
+                min_index_location = distance_location.idxmin()
+                if min_value_location < 1:
+                    dossier.loc[
+                        row[0],
+                        'locationShifted'
+                        ] = dossier.loc[min_index_location, 'location']
+                    # Update dossier with same location.
+                    dossier.loc[
+                        dossier[
+                            'locationShifted'
+                            ] == row[1]['locationShifted'],
+                        'locationShifted'
+                        ] = dossier.loc[min_index_location, 'location']
+                else:
+                    # Search for dossier with locationshifted within one meter.
+                    distance_locshifted = row[1][
+                        'locationShifted'].distance(dossier['locationShifted'])
+                    distance_locshifted.drop(index=row[0], inplace=True)
+                    min_value_locshifted = distance_locshifted.min()
+                    min_index_locshifted = distance_locshifted.idxmin()
+                    if min_value_locshifted < 1:
+                        dossier.loc[
+                            row[0],
+                            'locationShifted'
+                            ] = dossier.loc[
+                                min_index_locshifted,
+                                'locationShifted']
+
+        # Update locationShiftedOrigin.
+        location_equal = dossier[
+            (dossier['location'] == dossier['locationShifted']
+             ) & dossier['location'].notnull()]
+        dossier.loc[
+            location_equal.index, 'locationShiftedOrigin'
+            ] = 'keine Verschiebung'
 
     # Add cluster id if available.
     if filepath_clusterid:
