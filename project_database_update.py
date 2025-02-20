@@ -114,7 +114,7 @@ FILEPATH_ADDRESSMATCHINGTYPE = './data/20241101_dossier_type.xlsx'
 FILEPATH_SPECIALTYPE = './data/20241030_dossier_specialtype.xlsx'
 
 # Filepath for source of project_relationship.
-FILEPATH_PROJECT_RELATIONSHIP = './data/20241103_dossier_relationship.csv'
+FILEPATH_PROJECT_RELATIONSHIP = './data/20250205_dossier_relationship.csv'
 
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
