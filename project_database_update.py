@@ -116,6 +116,9 @@ FILEPATH_SPECIALTYPE = './data/20241030_dossier_specialtype.xlsx'
 # Filepath for source of project_relationship.
 FILEPATH_PROJECT_RELATIONSHIP = './data/20250205_dossier_relationship.csv'
 
+# Filepath for correction file for project_period.
+FILEPATH_PROJECT_PERIOD = './data/20250220_dossier_period.csv'
+
 # Define direction of the backup file.
 BACKUP_DIR = '/mnt/research-storage/Projekt_HGB/DB_Dump/hgb'
 
@@ -806,45 +809,72 @@ def get_language(page_id, df_transcript, df_textregion, tr_type='paragraph'):
     return tr_language
 
 
-def get_validity_range(remark: str):
-    """Extract from StABS_Dossier.descriptiveNote the validity range of the
-    Dossier.
+def get_validity_range(remark: str, entry: pd.DataFrame):
+    """Extract from StABS_Dossier.descriptiveNote or year of entries the
+    validity range of the Dossier.
 
     In the attribute descriptiveNote of the entity StABS_Dossier, the validity
     range of a dossier is partially documented. This function extracts the
-    validity range from the note for the most frequent samples.
+    validity range from the note for the most frequent samples. If no yearFrom
+    could be determined based on the descriptive note, the minimum year is
+    defined as yearFrom on the basis of the entries belonging to the dossier
+    (project_entry.year). If no yearTo exists based on the descriptive note,
+    the maximum year from the entries is defined as yearTo.
 
         Args:
             remark (str): Note according to the pattern of
             StABS_Dossier.descriptiveNote.
+            entry (pd.DataFrame): Entries belonging to the dossier.
 
         Returns:
             Tuble: First element of the tuble correspond to the year from of
             the validity range, the second element to the year to of the
             validity range.
     """
-    if not remark:
-        return (None, None)
-    else:
-        year_from = None
-        year_to = None
+    year_from = None
+    year_to = None
 
-    # Search for year number from.
-    match_from = re.search(r'^((Seit)|(Errichtet)|(Ab)) 1[0-9]{3}\.', remark)
-    if match_from:
-        year_from = match_from.group()[-5:-1]
+    # Search for yearFrom and yearTo based on descriptive note.
+    if remark:
+        # Search for year number from.
+        match_from = re.search(
+            r'^((Seit)|(Errichtet)|(Ab)) 1[0-9]{3}\.', remark)
+        if match_from:
+            year_from = int(match_from.group()[-5:-1])
 
-    # Search for year number to.
-    match_to = re.search(r'((Bis)|(Abgebrochen)) 1[0-9]{3}\.', remark)
-    if match_to:
-        year_to = match_to.group()[-5:-1]
+        # Search for year number to.
+        match_to = re.search(r'((Bis)|(Abgebrochen)) 1[0-9]{3}\.', remark)
+        if match_to:
+            year_to_candidate = int(match_to.group()[-5:-1])
+            if not year_from:
+                year_to = year_to_candidate
+            elif year_from <= year_to_candidate:
+                year_to = year_to_candidate
 
-    # Consider patterns like "1734-1819".
-    if not year_from and not year_to:
-        match = re.match(r'^1[0-9]{3}-1[0-9]{3}\.?$', remark)
-        if match:
-            year_from = match.group()[:4]
-            year_to = match.group()[5:9]
+        # Consider patterns like "1734-1819".
+        if not year_from and not year_to:
+            match = re.match(r'^1[0-9]{3}-1[0-9]{3}\.?$', remark)
+            if match:
+                year_from = int(match.group()[:4])
+                year_to = int(match.group()[5:9])
+
+    # If year is not determined from descriptive note, get min/max year from
+    # entries.
+    if not year_from:
+        if not math.isnan(entry['year'].min()):
+            year_from_candidate = int(entry['year'].min())
+            if not year_to:
+                year_from = year_from_candidate
+            elif year_from_candidate <= year_to:
+                year_from = year_from_candidate
+
+    if not year_to:
+        if not math.isnan(entry['year'].max()):
+            year_to_candidate = int(entry['year'].max())
+            if not year_from:
+                year_to = year_to_candidate
+            elif year_from <= year_to_candidate:
+                year_to = year_to_candidate
 
     return (year_from, year_to)
 
@@ -861,7 +891,8 @@ def processing_project(dbname, db_password, db_user='postgres',
                        filepath_addressmatchingtype='',
                        filepath_projectrelationship='',
                        filepath_source='',
-                       filepath_specialtype=''):
+                       filepath_specialtype='',
+                       filepath_projectperiod=''):
     """Processes the project data within the project database.
 
     This function processes all tables of the project database with the prefix
@@ -908,11 +939,21 @@ def processing_project(dbname, db_password, db_user='postgres',
     The column project_entry.manuallyCorrected is set to True, if the date or
     the grouping of the pages is corrected by one of the correction files.
 
-    2. Determine the entries of the database table project_dossier. Only
+    2. Determine the entries of the database table project_period. Only
+    validity ranges for dossier are considered that are referenced by elements
+    of the entity project_entry. In particular:
+    - Based on StABS_Dossier.descriptiveNote, yearFrom and yearTo are
+    determined for frequent cases. If yearFrom or yearTo could not be
+    determined, the minimum year of the entries associated with the dossier is
+    defined as yearFrom and the maximum year of the associated entries is
+    defined as yearTo.
+    - If periods are defined manually for dossiers, these periods serve as the
+    basis. yearFrom of the first period and yearTo of the last period are
+    added if there is a gap, if yearFrom <= yearTo in the respective period.
+
+    3. Determine the entries of the database table project_dossier. Only
     dossiers are considered that are referenced by elements of the entity
     project_entry. In particular:
-    - Search entries for yearFrom1 and yearTo1 based on
-    stabs_dossier.descriptiveNote.
     - Determine the geographical localisation of the dossier if available in
     the entity geo_address.
     - If a correction file is made available, additional dossier locations
@@ -937,7 +978,7 @@ def processing_project(dbname, db_password, db_user='postgres',
     project_dossier.specialType. The values are based on a simple search with
     selected terms in StABS_Dossier.title.
 
-    3. Based on a CSV file, the entries for the project_relationship entity
+    4. Based on a CSV file, the entries for the project_relationship entity
     are generated (if available).
 
     Args:
@@ -963,6 +1004,8 @@ def processing_project(dbname, db_password, db_user='postgres',
         entry source.
         filepath_specialtype (str): Filepath of the file containing the data
         for dossier special types.
+        filepath_projectperiod (str): Filepath of the correction file for
+        dossier periods.
 
     Returns:
         None.
@@ -1228,20 +1271,127 @@ def processing_project(dbname, db_password, db_user='postgres',
         ].copy()
     dossier = stabs_dossier_reduced[['dossierId', 'descriptiveNote']].copy()
 
-    # Determine the validity range based on the descriptive note.
-    dossier[['yearFrom1', 'yearTo1']] = dossier.apply(
-        lambda row: get_validity_range(row['descriptiveNote']),
-        axis=1,
-        result_type='expand'
-        )
+    # Generate the entity project_period.
+    period = pd.DataFrame(columns=['dossierId',
+                                   'yearFrom',
+                                   'yearTo',
+                                   'yearFromManuallyCorrected',
+                                   'yearToManuallyCorrected'])
+    if filepath_projectperiod:
+        manualperiod = pd.read_csv(filepath_projectperiod)
+    else:
+        logging.warning('No correction file for project_period available.')
+    for row in dossier.iterrows():
+        yearfrommanuallycorrected = False
+        yeartomanuallycorrected = False
 
-    # Adapt the dataframe to the destination database schema.
+        # Determine the validity range based on descriptive note or entries.
+        entry_row = entry[entry['dossierId'] == row[1]['dossierId']]
+        (yearfrom, yearto) = get_validity_range(
+            remark=row[1]['descriptiveNote'],
+            entry=entry_row
+            )
+
+        # Account for manually defined time periods.
+        if filepath_projectperiod:
+            manualperiod_row = manualperiod[
+                manualperiod['dossierId'] == row[1]['dossierId']
+                ].reset_index(drop=True)
+
+            if manualperiod_row.shape[0] > 0:
+                # Add necessary rows for period.
+                manualperiod_row['yearFromManuallyCorrected'] = True
+                manualperiod_row['yearToManuallyCorrected'] = True
+
+                # Test whether the order of the time periods is correct in
+                # terms of time.
+                all_years = []
+                for r in manualperiod_row.iterrows():
+                    all_years.append(r[1]['yearFrom'])
+                    all_years.append(r[1]['yearTo'])
+                if math.isnan(all_years[0]):
+                    all_years = all_years[1:]
+                    if yearfrom and yearfrom <= all_years[0]:
+                        # Update yearfrom.
+                        manualperiod_row.at[0, 'yearFrom'] = yearfrom
+                    else:
+                        logging.warning(
+                            'yearFrom is missing for Dossier '
+                            f"{row[1]['dossierId']}.")
+                    manualperiod_row.at[
+                        0, 'yearFromManuallyCorrected'] = False
+                if math.isnan(all_years[-1]):
+                    all_years = all_years[:-1]
+                    if yearto and all_years[-1] <= yearto:
+                        # Update yearto.
+                        manualperiod_row.at[
+                            manualperiod_row.index[-1],
+                            'yearTo'
+                            ] = yearto
+                    else:
+                        logging.warning(
+                            'yearTo is missing for Dossier '
+                            f"{row[1]['dossierId']}.")
+                    manualperiod_row.at[
+                        manualperiod_row.index[-1],
+                        'yearToManuallyCorrected'
+                        ] = False
+                if any(math.isnan(x) for x in all_years):
+                    logging.warning(
+                        f"Dossier {row[1]['dossierId']} has manually defined "
+                        'periods with missing yearFrom or yearTo not at the '
+                        'beginning of the first period or the ending of the '
+                        'latest period.')
+                    continue
+                for i in range(len(all_years) - 1):
+                    if all_years[i] > all_years[i + 1]:
+                        logging.warning(
+                            f"Dossier {row[1]['dossierId']} has manually "
+                            'defined periods with yearFrom and yearTo not in '
+                            'ascending order.')
+                        continue
+
+                # Append the new periods.
+                period = pd.concat(
+                    [period, manualperiod_row],
+                    ignore_index=True)
+                continue
+
+            else:
+                # Detect missing values when not manually corrected.
+                if not yearfrom and not yearto:
+                    logging.warning(
+                        'No yearFrom and yearTo for Dossier '
+                        f"{row[1]['dossierId']}.")
+                elif not yearfrom:
+                    logging.warning(
+                        f"No yearFrom for Dossier {row[1]['dossierId']}.")
+                elif not yearto:
+                    logging.warning(
+                        f"No yearTo for Dossier {row[1]['dossierId']}.")
+
+        # Append the new periods.
+        new_period = pd.DataFrame(
+            [[row[1]['dossierId'],
+              yearfrom, yearto,
+              yearfrommanuallycorrected,
+              yeartomanuallycorrected]],
+            columns=['dossierId',
+                     'yearFrom', 'yearTo',
+                     'yearFromManuallyCorrected',
+                     'yearToManuallyCorrected'
+                     ])
+        period = pd.concat([period, new_period], ignore_index=True)
+
+    logging.info('Entity project_period generated.')
+
+    # Adapt the dataframe to the destination database schema for
+    # project_dossier.
     dossier = dossier.drop('descriptiveNote', axis=1)
-    dossier[['yearFrom2', 'yearTo2',
-             'locationAccuracy', 'locationOrigin', 'location',
+    dossier[['locationAccuracy', 'locationOrigin', 'location',
              'locationShifted', 'locationShiftedOrigin',
              'clusterId', 'addressMatchingType', 'specialType']
-            ] = [None, None, None, None, None, None, None, None, None, None]
+            ] = [None, None, None, None, None, None, None, None]
     dossier = geopandas.GeoDataFrame(data=dossier, geometry='location',
                                      crs='EPSG:2056')
 
@@ -1434,6 +1584,10 @@ def processing_project(dbname, db_password, db_user='postgres',
                       host=db_host, port=db_port
                       )
     populate_table(df=entry, dbname=dbname, dbtable='project_entry',
+                   user=db_user, password=db_password,
+                   host=db_host, port=db_port
+                   )
+    populate_table(df=period, dbname=dbname, dbtable='project_period',
                    user=db_user, password=db_password,
                    host=db_host, port=db_port
                    )
@@ -1895,7 +2049,8 @@ def main():
                 filepath_addressmatchingtype=FILEPATH_ADDRESSMATCHINGTYPE,
                 filepath_projectrelationship=FILEPATH_PROJECT_RELATIONSHIP,
                 filepath_source=FILEPATH_SOURCE,
-                filepath_specialtype=FILEPATH_SPECIALTYPE
+                filepath_specialtype=FILEPATH_SPECIALTYPE,
+                filepath_projectperiod=FILEPATH_PROJECT_PERIOD
                 )
             logging.info('Project data are processed.')
         elif db_exist:
@@ -1909,12 +2064,11 @@ def main():
             cursor.execute(f"""
             INSERT INTO project_dossier
             SELECT * FROM dblink('{dblink_connname}',
-            'SELECT dossierid,yearfrom1,yearto1,yearfrom2,yearto2,
+            'SELECT dossierid,
             locationaccuracy,locationorigin,location,
             locationshifted,locationshiftedorigin,
             clusterid,addressmatchingtype,specialtype FROM project_dossier')
-            AS t(dossierid text, yearfrom1 integer, yearto1 integer,
-            yearfrom2 integer, yearto2 integer, locationaccuracy text,
+            AS t(dossierid text, locationaccuracy text,
             locationorigin text, location geometry,
             locationshifted geometry, locationshiftedorigin text,
             clusterid integer, addressmatchingtype text, specialtype text)
@@ -1935,6 +2089,15 @@ def main():
             SELECT * FROM dblink('{dblink_connname}',
             'SELECT sourcedossierid,targetdossierid FROM project_relationship')
             AS t(sourcedossierid text, targetdossierid text)
+            """)
+            cursor.execute(f"""
+            INSERT INTO project_period
+            SELECT * FROM dblink('{dblink_connname}',
+            'SELECT dossierid,yearfrom,yearto,
+            yearfrommanuallycorrected,yeartomanuallycorrected
+            FROM project_period')
+            AS t(dossierid text, yearfrom integer, yearto integer,
+            yearfrommanuallycorrected boolean, yeartomanuallycorrected boolean)
             """)
             conn.close()
             logging.info('Project data are copied from current database.')

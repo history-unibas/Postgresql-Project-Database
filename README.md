@@ -65,15 +65,9 @@ This entity contains metadata from the State Archives on the "Regesten Klingenta
 ### Project_Dossier
 Elements of the Project_Dossier table represent a dossier of HGB analogous to the elements in the entity StABS_Dossier. Only dossiers relevant to our project are mapped in this entity. This means dossiers that are referenced in the Project_Dossier entity.
 
-This entity is currently being further developed.
-
 | **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
 |---------------|---------------|---------------|---------------|---------------|
 | dossierId | VARCHAR(15) | yes | PRIMARY KEY, FOREIGN KEY | Identifier of dossier |
-| yearFrom1 | SMALLINT | no |  | Year from when dossier is valid based on StABS_Dossier.descriptiveNote (first time interval)|
-| yearTo1 | SMALLINT | no |  | Year until when dossier is valid based on StABS_Dossier.descriptiveNote (first time interval)|
-| yearFrom2 | SMALLINT | no |  | Year from of second time interval when dossier is valid |
-| yearTo2 | SMALLINT | no |  | Year until of second time interval when dossier is valid |
 | locationAccuracy | VARCHAR(50) | no |  | Statement on the accuracy of the geographical location of the dossier |
 | locationOrigin | VARCHAR(100) | no |  | Statement on the origin of the geographical location of the dossier |
 | location | geometry(Point, 2056) | no |  | Geographical location of the dossier |
@@ -100,13 +94,24 @@ Elements of the Project_Entry table represent an entry recorded in the HGB. Seve
 | sourceOrigin | VARCHAR(30) | no |  | Information on the determination of source |
 | keyLatestTranscript | VARCHAR(30)[] | yes |  | List of keys of the latest associated transcripts (Transkribus_Transcript.key) |
 
+### Project_Period
+The elements of the Project_Period entity represent the validity period of the dossier that exists in the Project_Dossier entity. A dossier can have several entries or validity periods.
+
+| **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
+|---------------|---------------|---------------|---------------|---------------|
+| dossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to the linked project dossier |
+| yearFrom | SMALLINT | no |  | Year from when dossier is valid |
+| yearTo | SMALLINT | no |  | Year until when dossier is valid |
+| yearFromManuallyCorrected | BOOLEAN | yes |  | Indication if the attribute yearFrom is manually corrected |
+| yearToManuallyCorrected | BOOLEAN | yes |  | Indication if the attribute yearFrom is manually corrected |
+
 ### Project_Relationship
 This entity maps direct temporal relationships between HGB dossiers (represented as a direct edge list). The relationships were determined on the basis of the cluster information (project_dossier.clusterId) using a rule-based approach and manual editing. Dossier represented by identifier in sourceDossierId has as descendant dossier with identifier in targetDossierId. Conversely, dossier represented by identifier in targetDossierId has dossier with identifier in sourceDossierId as previous dossier. Dossier can have several descendants or preceding dossiers due to a split or merge.
 
 | **Column name** | **Data type** | **Not NULL?** | **Additional Requirement** | **Description** |
 |---------------|---------------|---------------|---------------|---------------|
-| sourceDossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to source project dossier. |
-| targetDossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to target project dossier. |
+| sourceDossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to source project dossier |
+| targetDossierId | VARCHAR(15) | yes | FOREIGN KEY | Identifier to target project dossier |
 
 ### Transkribus_Collection
 Elements of the Transkribus_Collection entity represent a street and are stored as collection on Transkribus.

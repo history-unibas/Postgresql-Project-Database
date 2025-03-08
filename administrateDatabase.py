@@ -180,10 +180,6 @@ def create_schema(dbname, user, password, host, port=5432):
     cursor.execute("""
     CREATE TABLE Project_Dossier(
         dossierId VARCHAR(15) PRIMARY KEY REFERENCES StABS_Dossier(dossierId),
-        yearFrom1 SMALLINT,
-        yearTo1 SMALLINT,
-        yearFrom2 SMALLINT,
-        yearTo2 SMALLINT,
         locationAccuracy VARCHAR(50),
         locationOrigin VARCHAR(100),
         location geometry(Point, 2056),
@@ -215,6 +211,15 @@ def create_schema(dbname, user, password, host, port=5432):
             REFERENCES Project_Dossier(dossierId),
         targetDossierId VARCHAR(15) NOT NULL
             REFERENCES Project_Dossier(dossierId))
+    """
+                   )
+    cursor.execute("""
+    CREATE TABLE Project_Period(
+        dossierId VARCHAR(15) NOT NULL REFERENCES Project_Dossier(dossierId),
+        yearFrom SMALLINT,
+        yearTo SMALLINT,
+        yearFromManuallyCorrected BOOLEAN NOT NULL DEFAULT false,
+        yearToManuallyCorrected BOOLEAN NOT NULL DEFAULT false)
     """
                    )
 
